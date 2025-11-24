@@ -39,9 +39,10 @@ class DanTriCrawler(BaseCrawler):
         
     def extract_content(self, url: str) -> tuple:
         """
-        Extract title, description and paragraphs from url
+        Extract title, description, publish date and paragraphs from url
         @param url (str): url to crawl
         @return title (str)
+        @return publish_date (str)
         @return description (generator)
         @return paragraphs (generator)
         """
@@ -50,29 +51,35 @@ class DanTriCrawler(BaseCrawler):
 
         title = soup.find("h1", class_="title-page detail") 
         if title == None:
-            return None, None, None
+            return None, None, None, None
         title = title.text
+
+        # Extract publish date
+        date_tag = soup.find("time", class_="author-time")
+        publish_date = date_tag.text.strip() if date_tag else "N/A"
 
         description = (get_text_from_tag(p) for p in soup.find("h2", class_="singular-sapo").contents)
         content = soup.find("div", class_="singular-content")
         paragraphs = (get_text_from_tag(p) for p in content.find_all("p"))
 
-        return title, description, paragraphs
+        return title, publish_date, description, paragraphs
 
     def write_content(self, url: str, output_fpath: str) -> bool:
         """
-        From url, extract title, description and paragraphs then write in output_fpath
+        From url, extract title, publish date, description and paragraphs then write in output_fpath
         @param url (str): url to crawl
         @param output_fpath (str): file path to save crawled result
         @return (bool): True if crawl successfully and otherwise
         """
-        title, description, paragraphs = self.extract_content(url)
-                    
+        title, publish_date, description, paragraphs = self.extract_content(url)
+
         if title == None:
             return False
 
         with open(output_fpath, "w", encoding="utf-8") as file:
             file.write(title + "\n")
+            file.write(f"Ngày xuất bản: {publish_date}\n")
+            file.write("\n")
             for p in description:
                 file.write(p + "\n")
             for p in paragraphs:                     
@@ -82,7 +89,13 @@ class DanTriCrawler(BaseCrawler):
     
     def get_urls_of_type_thread(self, article_type, page_number):
         """" Get urls of articles in a specific type in a page"""
-        page_url = f"https://dantri.com.vn/{article_type}/trang-{page_number}.htm"
+        # Support subcategory format: "the-gioi/quan-su"
+        # Check if article_type contains "/" for subcategory
+        if "/" in article_type:
+            page_url = f"https://dantri.com.vn/{article_type}/trang-{page_number}.htm"
+        else:
+            page_url = f"https://dantri.com.vn/{article_type}/trang-{page_number}.htm"
+
         content = requests.get(page_url).content
         soup = BeautifulSoup(content, "html.parser")
         titles = soup.find_all(class_="article-title")
@@ -95,6 +108,11 @@ class DanTriCrawler(BaseCrawler):
 
         for title in titles:
             link = title.find_all("a")[0]
-            articles_urls.append(self.base_url + link.get("href"))
-    
+            href = link.get("href")
+            # Check if href is already a full URL
+            if href.startswith("http"):
+                articles_urls.append(href)
+            else:
+                articles_urls.append(self.base_url + href)
+
         return articles_urls

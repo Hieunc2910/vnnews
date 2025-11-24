@@ -35,9 +35,10 @@ class VNExpressCrawler(BaseCrawler):
 
     def extract_content(self, url: str) -> tuple:
         """
-        Extract title, description and paragraphs from url
+        Extract title, description, publish date and paragraphs from url
         @param url (str): url to crawl
         @return title (str)
+        @return publish_date (str)
         @return description (generator)
         @return paragraphs (generator)
         """
@@ -46,29 +47,35 @@ class VNExpressCrawler(BaseCrawler):
 
         title = soup.find("h1", class_="title-detail") 
         if title == None:
-            return None, None, None
+            return None, None, None, None
         title = title.text
+
+        # Extract publish date
+        date_tag = soup.find("span", class_="date")
+        publish_date = date_tag.text.strip() if date_tag else "N/A"
 
         # some sport news have location-stamp child tag inside description tag
         description = (get_text_from_tag(p) for p in soup.find("p", class_="description").contents)
         paragraphs = (get_text_from_tag(p) for p in soup.find_all("p", class_="Normal"))
 
-        return title, description, paragraphs
+        return title, publish_date, description, paragraphs
 
     def write_content(self, url: str, output_fpath: str) -> bool:
         """
-        From url, extract title, description and paragraphs then write in output_fpath
+        From url, extract title, publish date, description and paragraphs then write in output_fpath
         @param url (str): url to crawl
         @param output_fpath (str): file path to save crawled result
         @return (bool): True if crawl successfully and otherwise
         """
-        title, description, paragraphs = self.extract_content(url)
-                    
+        title, publish_date, description, paragraphs = self.extract_content(url)
+
         if title == None:
             return False
 
         with open(output_fpath, "w", encoding="utf-8") as file:
             file.write(title + "\n")
+            file.write(f"Ngày xuất bản: {publish_date}\n")
+            file.write("\n")
             for p in description:
                 file.write(p + "\n")
             for p in paragraphs:                     
@@ -78,6 +85,7 @@ class VNExpressCrawler(BaseCrawler):
 
     def get_urls_of_type_thread(self, article_type, page_number):
         """" Get urls of articles in a specific type in a page"""
+        # Support subcategory format: "the-gioi/quan-su"
         page_url = f"https://vnexpress.net/{article_type}-p{page_number}"
         content = requests.get(page_url).content
         soup = BeautifulSoup(content, "html.parser")

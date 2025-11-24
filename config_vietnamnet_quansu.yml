@@ -1,0 +1,16 @@
+# VietNamNet - Quân sự
+webname: "vietnamnet"
+
+# tasks = ["url", "type"]
+task: "type"
+
+#logger config file path
+logger_fpath: "logger/logger_config.yml"
+urls_fpath: "urls.txt"
+output_dpath: "result/vietnamnet_quansu"
+num_workers: 2
+
+# Crawl quân sự (subcategory)
+article_type: "the-gioi/quan-su"
+total_pages: 10
+

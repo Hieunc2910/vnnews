@@ -100,13 +100,17 @@ class BaseCrawler(ABC):
         # getting urls
         self.logger.info(f"Getting urls of {article_type}...")
         articles_urls = self.get_urls_of_type(article_type)
-        articles_urls_fpath = "/".join([urls_dpath, f"{article_type}.txt"])
+
+        # Replace / with _ for file/folder names to avoid directory issues
+        safe_article_type = article_type.replace("/", "_")
+
+        articles_urls_fpath = "/".join([urls_dpath, f"{safe_article_type}.txt"])
         with open(articles_urls_fpath, "w") as urls_file:
             urls_file.write("\n".join(articles_urls)) 
 
         # crawling urls
         self.logger.info(f"Crawling from urls of {article_type}...")
-        results_type_dpath = "/".join([results_dpath, article_type])
+        results_type_dpath = "/".join([results_dpath, safe_article_type])
         error_urls = self.crawl_urls(articles_urls_fpath, results_type_dpath)
         
         return error_urls

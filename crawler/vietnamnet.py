@@ -39,9 +39,10 @@ class VietNamNetCrawler(BaseCrawler):
         
     def extract_content(self, url: str) -> tuple:
         """
-        Extract title, description and paragraphs from url
+        Extract title, description, publish date and paragraphs from url
         @param url (str): url to crawl
         @return title (str)
+        @return publish_date (str)
         @return description (generator)
         @return paragraphs (generator)
         """
@@ -53,28 +54,35 @@ class VietNamNetCrawler(BaseCrawler):
         p_tag = soup.find("div", class_=["maincontent", "main-content"])
 
         if [var for var in (title_tag, desc_tag, p_tag) if var is None]:
-            return None, None, None
-        
+            return None, None, None, None
+
         title = title_tag.text
+
+        # Extract publish date
+        date_tag = soup.find("div", class_="bread-crumb-detail__time")
+        publish_date = date_tag.text.strip() if date_tag else "N/A"
+
         description = (get_text_from_tag(p) for p in desc_tag.contents)
         paragraphs = (get_text_from_tag(p) for p in p_tag.find_all("p"))
 
-        return title, description, paragraphs
+        return title, publish_date, description, paragraphs
 
     def write_content(self, url: str, output_fpath: str) -> bool:
         """
-        From url, extract title, description and paragraphs then write in output_fpath
+        From url, extract title, publish date, description and paragraphs then write in output_fpath
         @param url (str): url to crawl
         @param output_fpath (str): file path to save crawled result
         @return (bool): True if crawl successfully and otherwise
         """
-        title, description, paragraphs = self.extract_content(url)
-                    
+        title, publish_date, description, paragraphs = self.extract_content(url)
+
         if title == None:
             return False
 
         with open(output_fpath, "w", encoding="utf-8") as file:
             file.write(title + "\n")
+            file.write(f"Ngày xuất bản: {publish_date}\n")
+            file.write("\n")
             for p in description:
                 file.write(p + "\n")
             for p in paragraphs:                     
@@ -84,7 +92,13 @@ class VietNamNetCrawler(BaseCrawler):
     
     def get_urls_of_type_thread(self, article_type, page_number):
         """" Get urls of articles in a specific type in a page"""
-        page_url = f"https://vietnamnet.vn/{article_type}-page{page_number}"
+        # Support subcategory format: "the-gioi/quan-su"
+        # VietnamNet uses format: /the-gioi/quan-su-pageX
+        if "/" in article_type:
+            page_url = f"https://vietnamnet.vn/{article_type}-page{page_number}"
+        else:
+            page_url = f"https://vietnamnet.vn/{article_type}-page{page_number}"
+
         content = requests.get(page_url).content
         soup = BeautifulSoup(content, "html.parser")
         titles = soup.find_all(class_=["horizontalPost__main-title", "vnn-title", "title-bold"])
