@@ -132,11 +132,31 @@ class BaseCrawler(ABC):
     def get_urls_of_type(self, article_type):
         """" Get urls of articles in a specific type """
         articles_urls = list()
+
+        # If max_days_old is set, use time-based filtering
+        if hasattr(self, 'max_days_old') and self.max_days_old is not None:
+            articles_urls = self.get_urls_with_time_filter(article_type)
+        else:
+            # Original behavior: crawl all pages
+            args = ([article_type]*self.total_pages, range(1, self.total_pages+1))
+            with concurrent.futures.ThreadPoolExecutor(max_workers=self.num_workers) as executor:
+                results = list(tqdm(executor.map(self.get_urls_of_type_thread, *args), total=self.total_pages, desc="Pages"))
+
+            articles_urls = sum(results, [])
+            articles_urls = list(set(articles_urls))
+
+        return articles_urls
+
+    def get_urls_with_time_filter(self, article_type):
+        """
+        Get URLs with time-based filtering (stop when articles are too old)
+        This method should be overridden by child classes for site-specific implementation
+        """
+        self.logger.warning("Time-based filtering not implemented for this crawler, falling back to page-based")
         args = ([article_type]*self.total_pages, range(1, self.total_pages+1))
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.num_workers) as executor:
             results = list(tqdm(executor.map(self.get_urls_of_type_thread, *args), total=self.total_pages, desc="Pages"))
 
         articles_urls = sum(results, [])
-        articles_urls = list(set(articles_urls))
-    
-        return articles_urls
+        return list(set(articles_urls))
+

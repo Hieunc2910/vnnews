@@ -1,4 +1,4 @@
-# VietNamNet - Quân sự
+# VietnamNet - Quân sự
 webname: "vietnamnet"
 
 # tasks = ["url", "type"]
@@ -12,5 +12,8 @@ num_workers: 2
 
 # Crawl quân sự (subcategory)
 article_type: "the-gioi/quan-su"
-total_pages: 10
+total_pages: 15
 
+# Time-based filtering: only crawl articles from the last X days
+# Set to null or remove to crawl all pages
+max_days_old: 7

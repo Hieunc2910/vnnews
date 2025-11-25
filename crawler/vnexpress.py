@@ -12,6 +12,7 @@ if str(ROOT) not in sys.path:
 from logger import log
 from crawler.base_crawler import BaseCrawler
 from utils.bs4_utils import get_text_from_tag
+from utils.date_utils import parse_vnexpress_date, is_recent_article
 
 
 class VNExpressCrawler(BaseCrawler):
@@ -101,3 +102,81 @@ class VNExpressCrawler(BaseCrawler):
             articles_urls.append(link.get("href"))
     
         return articles_urls
+
+    def get_urls_with_time_filter(self, article_type):
+        """
+        Get URLs with time-based filtering for VNExpress
+        Stops when encountering too many old articles
+        """
+        from tqdm import tqdm
+
+        articles_urls = []
+        page = 1
+        consecutive_old_pages = 0
+        max_consecutive_old = 10  # Stop after 3 consecutive pages with all old articles
+
+        self.logger.info(f"Crawling with time filter: max {self.max_days_old} days old")
+
+        pbar = tqdm(desc="Pages (time-filtered)", unit="page")
+
+        while page <= self.total_pages and consecutive_old_pages < max_consecutive_old:
+            page_url = f"https://vnexpress.net/{article_type}-p{page}"
+
+            try:
+                content = requests.get(page_url).content
+                soup = BeautifulSoup(content, "html.parser")
+                titles = soup.find_all(class_="title-news")
+
+                if len(titles) == 0:
+                    self.logger.info(f"No articles found on page {page}")
+                    break
+
+                page_has_recent = False
+
+                for title in titles:
+                    link = title.find_all("a")[0]
+                    url = link.get("href")
+
+                    # Try to get date from article page
+                    try:
+                        article_content = requests.get(url).content
+                        article_soup = BeautifulSoup(article_content, "html.parser")
+                        date_tag = article_soup.find("span", class_="date")
+
+                        if date_tag:
+                            date_str = date_tag.text.strip()
+                            if is_recent_article(date_str, self.max_days_old, parse_vnexpress_date):
+                                articles_urls.append(url)
+                                page_has_recent = True
+                            else:
+                                from utils.date_utils import get_days_old
+                                days = get_days_old(date_str, parse_vnexpress_date)
+                                self.logger.debug(f"Skipping old article ({days} days): {url}")
+                        else:
+                            # If no date found, include it to be safe
+                            articles_urls.append(url)
+                            page_has_recent = True
+                    except Exception as e:
+                        # If error getting article, include it to be safe
+                        self.logger.debug(f"Error checking date for {url}: {e}")
+                        articles_urls.append(url)
+                        page_has_recent = True
+
+                if page_has_recent:
+                    consecutive_old_pages = 0
+                else:
+                    consecutive_old_pages += 1
+                    self.logger.info(f"Page {page} has no recent articles ({consecutive_old_pages}/{max_consecutive_old})")
+
+                page += 1
+                pbar.update(1)
+
+            except Exception as e:
+                self.logger.error(f"Error crawling page {page}: {e}")
+                break
+
+        pbar.close()
+        self.logger.info(f"Found {len(articles_urls)} recent articles from {page-1} pages")
+
+        return list(set(articles_urls))
+
