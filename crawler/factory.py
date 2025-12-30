@@ -1,11 +1,14 @@
 from .vnexpress import VNExpressCrawler
 from .dantri import DanTriCrawler
 from .vietnamnet import VietNamNetCrawler
+from .qdnd import QDNDCrawler
 
-WEBNAMES = {"vnexpress": VNExpressCrawler,
-            "dantri": DanTriCrawler,
-            "vietnamnet": VietNamNetCrawler}
+CRAWLERS = {
+    "vnexpress": VNExpressCrawler,
+    "dantri": DanTriCrawler,
+    "vietnamnet": VietNamNetCrawler,
+    "qdnd": QDNDCrawler
+}
 
 def get_crawler(webname, **kwargs):
-    crawler = WEBNAMES[webname](**kwargs)
-    return crawler
+    return CRAWLERS[webname](**kwargs)

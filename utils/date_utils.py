@@ -1,102 +1,67 @@
-"""
-Utility functions for parsing and comparing dates from Vietnamese news websites
-"""
-import re
 from datetime import datetime, timedelta
 
 
-def parse_vnexpress_date(date_str):
+def parse_qdnd_date(date_str):
     """
-    Parse VNExpress date format
-    Examples: "Thứ hai, 25/11/2025, 10:30 (GMT+7)"
+    Parse QDND date format: 2025-05-27T06:31:00+07:00
+    Trả về datetime object
     """
     try:
-        # Extract date part: DD/MM/YYYY
-        match = re.search(r'(\d{1,2})/(\d{1,2})/(\d{4})', date_str)
-        if match:
-            day, month, year = match.groups()
-            return datetime(int(year), int(month), int(day))
+        # Loại bỏ timezone (+07:00) vì datetime.strptime không xử lý được
+        if '+' in date_str:
+            date_str = date_str.split('+')[0]
+        elif 'Z' in date_str:
+            date_str = date_str.replace('Z', '')
+
+        return datetime.strptime(date_str, "%Y-%m-%dT%H:%M:%S")
     except:
-        pass
-    return None
+        return None
 
 
 def parse_dantri_date(date_str):
-    """
-    Parse Dân Trí date format
-    Examples: "25/11/2025 10:30", "Thứ hai, 25/11/2025, 10:30"
-    """
+    """Parse DanTri date format"""
     try:
-        # Extract date part: DD/MM/YYYY
-        match = re.search(r'(\d{1,2})/(\d{1,2})/(\d{4})', date_str)
-        if match:
-            day, month, year = match.groups()
-            return datetime(int(year), int(month), int(day))
+        return datetime.strptime(date_str, "%d/%m/%Y %H:%M %Z")
     except:
-        pass
-    return None
+        try:
+            return datetime.strptime(date_str, "%d/%m/%Y")
+        except:
+            return None
 
 
 def parse_vietnamnet_date(date_str):
-    """
-    Parse VietnamNet date format
-    Examples: "25/11/2025, 10:30 (GMT+7)", "Thứ hai, 25/11/2025"
-    """
+    """Parse VietnamNet date format"""
     try:
-        # Extract date part: DD/MM/YYYY
-        match = re.search(r'(\d{1,2})/(\d{1,2})/(\d{4})', date_str)
-        if match:
-            day, month, year = match.groups()
-            return datetime(int(year), int(month), int(day))
+        return datetime.strptime(date_str, "%d/%m/%Y %H:%M")
     except:
-        pass
-    return None
+        return None
+
+
+def parse_vnexpress_date(date_str):
+    """Parse VNExpress date format"""
+    try:
+        # Format: "Thứ ba, 30/12/2025, 14:30 (GMT+7)"
+        date_str = date_str.split(',')[-2].strip()  # Lấy phần "30/12/2025"
+        return datetime.strptime(date_str, "%d/%m/%Y")
+    except:
+        return None
 
 
 def is_recent_article(date_str, max_days_old, parse_func):
     """
-    Check if an article is recent enough based on its date string
-
-    Args:
-        date_str: Date string from the article
-        max_days_old: Maximum age in days
-        parse_func: Function to parse the date string
-
-    Returns:
-        True if article is recent enough, False otherwise
+    Kiểm tra xem bài viết có trong khoảng max_days_old ngày không
     """
-    if not date_str or date_str == "N/A":
-        # If we can't determine the date, assume it's recent to avoid skipping
-        return True
-
     article_date = parse_func(date_str)
     if not article_date:
-        return True  # If parsing fails, don't skip
+        return True  # Nếu không parse được, coi như là mới
 
-    current_date = datetime.now()
-    age_days = (current_date - article_date).days
-
-    return age_days <= max_days_old
+    days_old = (datetime.now() - article_date).days
+    return days_old <= max_days_old
 
 
 def get_days_old(date_str, parse_func):
-    """
-    Get the age of an article in days
-
-    Args:
-        date_str: Date string from the article
-        parse_func: Function to parse the date string
-
-    Returns:
-        Number of days old, or None if date cannot be parsed
-    """
-    if not date_str or date_str == "N/A":
-        return None
-
+    """Tính số ngày từ ngày xuất bản đến hiện tại"""
     article_date = parse_func(date_str)
     if not article_date:
         return None
-
-    current_date = datetime.now()
-    return (current_date - article_date).days
-
+    return (datetime.now() - article_date).days

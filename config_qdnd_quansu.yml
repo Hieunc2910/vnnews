@@ -1,0 +1,15 @@
+webname: "qdnd"
+task: "type"
+article_type: "quoc-te/quan-su-the-gioi"
+
+logger_fpath: "logger/logger_config.yml"
+output_dpath: "result/qdnd_quansu"
+
+num_workers: 3
+total_pages: 1
+max_days_old: 30
+
+continuous_mode: true
+crawl_interval: 30
+
+use_head_check: true
