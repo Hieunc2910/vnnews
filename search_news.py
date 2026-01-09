@@ -55,9 +55,8 @@ def main():
     while True:
         print("\n" + "=" * 80)
         query = input("Nhập từ khóa (hoặc 'thoat' để kết thúc): ").strip()
-
         if query.lower() in ['thoat', 'quit', 'exit', 'q']:
-            print("Tạm biệt!")
+
             break
 
         if not query:
