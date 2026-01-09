@@ -33,67 +33,37 @@ class ElasticIndexer:
         self._ensure_index()
 
     def _ensure_index(self):
-        """Tạo index với mapping tối ưu cho tiếng Việt"""
+        """Tạo index đơn giản, Elasticsearch tự động xử lý mapping"""
         if self.es.indices.exists(index=self.index_name):
             return
 
-        mapping = {
+        settings = {
             "settings": {
                 "number_of_shards": 1,
                 "number_of_replicas": 0,
                 "analysis": {
                     "analyzer": {
                         "vietnamese_analyzer": {
-                            "type": "custom",
-                            "tokenizer": "standard",
-                            "filter": [
-                                "lowercase",
-                                "asciifolding",
-                                "word_delimiter"
-                            ]
+                            "type": "standard",
+                            "stopwords": "_none_"
                         }
                     }
                 }
             },
             "mappings": {
                 "properties": {
-                    "title": {
-                        "type": "text",
-                        "analyzer": "vietnamese_analyzer",
-                        "fields": {
-                            "keyword": {"type": "keyword"},
-                            "exact": {
-                                "type": "text",
-                                "analyzer": "standard"
-                            }
-                        }
-                    },
-                    "body": {
-                        "type": "text",
-                        "analyzer": "vietnamese_analyzer"
-                    },
-                    "publish_date": {
-                        "type": "date",
-                        "format": "yyyy-MM-dd",
-                        "ignore_malformed": True
-                    },
-                    "publish_date_str": {
-                        "type": "keyword"
-                    },
-                    "source": {
-                        "type": "keyword"
-                    },
-                    "category": {
-                        "type": "keyword"
-                    },
-                    "url": {
-                        "type": "keyword"
-                    }
+                    "title": {"type": "text", "analyzer": "vietnamese_analyzer"},
+                    "body": {"type": "text", "analyzer": "vietnamese_analyzer"},
+                    "publish_date": {"type": "date", "format": "yyyy-MM-dd", "ignore_malformed": True},
+                    "publish_date_str": {"type": "text"},
+                    "source": {"type": "keyword"},
+                    "category": {"type": "keyword"},
+                    "url": {"type": "keyword"}
                 }
             }
         }
 
-        self.es.indices.create(index=self.index_name, body=mapping)
+        self.es.indices.create(index=self.index_name, body=settings)
 
     def parse_article_content(self, content, source, category, url):
         """Parse nội dung bài báo"""
@@ -114,8 +84,9 @@ class ElasticIndexer:
 
         body = "\n".join(lines[2:]).strip() if len(lines) > 2 else ""
 
-        # Dùng URL làm _id để tránh duplicate
-        doc_id = hashlib.md5(url.encode()).hexdigest()
+        # Dùng title+source làm _id để tránh duplicate
+        unique_key = f"{title}_{source}"
+        doc_id = hashlib.md5(unique_key.encode()).hexdigest()
 
         return {
             "_id": doc_id,

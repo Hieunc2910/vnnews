@@ -19,12 +19,15 @@ def print_article(article, index):
     matched_body = article.get('matched_in_body', [])
 
     if matched_title or matched_body:
+        print(f"\nLy do duoc chon:")
         if matched_title:
-            print(f" {matched_title[0].replace('<mark>', '[').replace('</mark>', ']')}")
+            clean_title = matched_title[0].replace('<mark>', '[').replace('</mark>', ']')
+            print(f"  Tieu de: {clean_title}")
         if matched_body:
+            print(f"  Noi dung:")
             for fragment in matched_body[:2]:
                 clean_fragment = fragment.replace('<mark>', '[').replace('</mark>', ']')
-                print(f"    + {clean_fragment}...")
+                print(f"    - {clean_fragment}...")
 
     print(f"\nNguon: {article.get('source', 'N/A')}")
     print(f"Chuyen muc: {article.get('category', 'N/A')}")

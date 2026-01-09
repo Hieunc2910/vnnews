@@ -13,6 +13,9 @@ class BaseCrawler(ABC):
     def __init__(self, **kwargs):
         self.__dict__.update(kwargs)
 
+        # Crawler name for prefixing outputs
+        self.crawler_name = kwargs.get('webname', self.__class__.__name__.replace('Crawler', '').lower())
+
         # Tracking for continuous mode
         self.crawled_urls = set()
         self.url_hashes = {}
@@ -89,7 +92,7 @@ class BaseCrawler(ABC):
             error_urls = []
 
         if error_urls:
-            print(f"Failed URLs: {len(error_urls)}")
+            print(f"[{self.crawler_name}] Failed URLs: {len(error_urls)}")
 
     def crawl_continuous(self):
         """Run continuous crawling with periodic intervals"""
@@ -134,17 +137,17 @@ class BaseCrawler(ABC):
         if self.continuous_mode:
             urls = [u for u in urls if u not in self.crawled_urls]
             if not urls:
-                print("No new URLs to crawl")
+                print(f"[{self.crawler_name}] No new URLs to crawl")
                 return []
 
         num_urls = len(urls)
-        print(f"Crawling {num_urls} URLs...")
+        print(f"[{self.crawler_name}] Crawling {num_urls} URLs...")
 
         self.index_len = len(str(num_urls))
 
         args = ([output_dpath] * num_urls, urls, range(num_urls))
         with concurrent.futures.ThreadPoolExecutor(max_workers=self.num_workers) as executor:
-            results = list(tqdm(executor.map(self.crawl_url_thread, *args), total=num_urls, desc="URLs"))
+            results = list(tqdm(executor.map(self.crawl_url_thread, *args), total=num_urls, desc=f"{self.crawler_name}"))
 
         return [result for result in results if result is not None]
 
@@ -195,9 +198,9 @@ class BaseCrawler(ABC):
         error_urls = list()
 
         # getting urls
-        print(f"Getting URLs from {article_type}...")
+        print(f"[{self.crawler_name}] Getting URLs from {article_type}...")
         articles_urls = self.get_urls_of_type(article_type)
-        print(f"Found {len(articles_urls)} unique URLs")
+        print(f"[{self.crawler_name}] Found {len(articles_urls)} unique URLs")
 
         # Replace / with _ for file/folder names to avoid directory issues
         safe_article_type = article_type.replace("/", "_")

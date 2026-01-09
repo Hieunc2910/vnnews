@@ -13,10 +13,8 @@ class VietNamNetCrawler(BaseCrawler):
 
     def extract_content(self, url):
         try:
-            random_delay(0.5, 2)
-            response = requests.get(url, headers=get_headers(), timeout=20)
-            response.encoding = 'utf-8'
-            soup = BeautifulSoup(response.text, "html.parser")
+            response = requests.get(url, timeout=20)
+            soup = BeautifulSoup(response.content, "html.parser")
 
             title = soup.find("h1", class_="content-detail-title")
             if not title:
@@ -37,7 +35,6 @@ class VietNamNetCrawler(BaseCrawler):
 
     def write_content(self, url, output_fpath):
         title, date, description, paragraphs = self.extract_content(url)
-
         if not title:
             return False
 
@@ -52,14 +49,12 @@ class VietNamNetCrawler(BaseCrawler):
     def get_urls_of_type_thread(self, article_type, page_number):
         try:
             random_delay(1, 3)
-            url = f"https://vietnamnet.vn/{article_type}" if page_number == 1 else f"https://vietnamnet.vn/{article_type}-page{page_number - 1}"
-            response = requests.get(url, headers=get_headers(), timeout=20)
-            response.encoding = 'utf-8'
+            url = f"{self.base_url}/{article_type}" if page_number == 1 else f"{self.base_url}/{article_type}-page{page_number - 1}"
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            response = requests.get(url, headers=headers, timeout=15)
             soup = BeautifulSoup(response.text, "html.parser")
 
             urls = []
-
-            # Tìm theo class names của VietNamNet
             title_classes = ["horizontalPost__main-title", "vnn-title", "title-bold"]
             titles = soup.find_all(class_=title_classes)
 
@@ -68,9 +63,9 @@ class VietNamNetCrawler(BaseCrawler):
                 if a_tags:
                     href = a_tags[0].get("href")
                     if href and href.endswith('.html'):
-                        full_url = href if self.base_url in href else self.base_url + href
+                        full_url = href if href.startswith(
+                            'http') else f"{self.base_url}{href if href.startswith('/') else '/' + href}"
                         urls.append(full_url)
-
 
             return list(set(urls))
         except:

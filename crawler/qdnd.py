@@ -15,10 +15,8 @@ class QDNDCrawler(BaseCrawler):
 
     def extract_content(self, url):
         try:
-            random_delay(0.5, 2)
-            response = requests.get(url, headers=get_headers(), timeout=20)
-            response.encoding = 'utf-8'
-            soup = BeautifulSoup(response.text, "html.parser")
+            response = requests.get(url, timeout=20)
+            soup = BeautifulSoup(response.content, "html.parser")
 
             title = soup.find("h1")
             if not title:
@@ -29,10 +27,7 @@ class QDNDCrawler(BaseCrawler):
             else:
                 title = title.text.strip()
 
-            # Tìm date theo nhiều cách
             date = "N/A"
-
-            # 1. JSON-LD
             for script in soup.find_all('script', type='application/ld+json'):
                 try:
                     data = json.loads(script.string)
@@ -47,13 +42,11 @@ class QDNDCrawler(BaseCrawler):
                 except:
                     pass
 
-            # 2. Thẻ time
             if date == "N/A":
                 date_tag = soup.find("time")
                 if date_tag:
                     date = date_tag.get("datetime") or date_tag.text.strip() or "N/A"
 
-            # 3. Meta tag
             if date == "N/A":
                 meta_date = soup.find("meta", property="article:published_time")
                 if meta_date:
@@ -68,12 +61,10 @@ class QDNDCrawler(BaseCrawler):
 
             return title, date, description, paragraphs
         except Exception as e:
-            self.logger.debug(f"Extract error {url}: {e}")
             return None, None, None, None
 
     def write_content(self, url, output_fpath):
         title, date, description, paragraphs = self.extract_content(url)
-
         if not title:
             return False
 
@@ -86,17 +77,14 @@ class QDNDCrawler(BaseCrawler):
         return True
 
     def _format_date(self, date_str):
-        """Format ISO date sang định dạng tiếng Việt"""
         if not date_str or date_str == "N/A":
             return date_str
         try:
             dt = parse_qdnd_date(date_str)
             if not dt:
                 return date_str
-
             weekdays = ["Thứ hai", "Thứ ba", "Thứ tư", "Thứ năm", "Thứ sáu", "Thứ bảy", "Chủ nhật"]
-            weekday = weekdays[dt.weekday()]
-            return f"{weekday}, {dt.strftime('%d/%m/%Y')}, {dt.strftime('%H:%M')} (GMT+7)"
+            return f"{weekdays[dt.weekday()]}, {dt.strftime('%d/%m/%Y')}, {dt.strftime('%H:%M')} (GMT+7)"
         except:
             return date_str
 
@@ -104,29 +92,22 @@ class QDNDCrawler(BaseCrawler):
         try:
             random_delay(1, 3)
             url = f"{self.base_url}/{article_type}" if page_number == 1 else f"{self.base_url}/{article_type}/p/{page_number}"
-            response = requests.get(url, headers=get_headers(), timeout=20)
-            response.encoding = 'utf-8'
+            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
+            response = requests.get(url, headers=headers, timeout=15)
             soup = BeautifulSoup(response.text, "html.parser")
             articles = soup.find_all("article")
-
-            if not articles:
-                return []
 
             urls = []
             for art in articles:
                 h3 = art.find("h3")
                 link = h3.find("a", href=True) if h3 else art.find("a", href=True)
-
                 if link:
                     href = link.get("href")
                     if href.startswith('http'):
                         urls.append(href)
                     elif href.startswith('/'):
-                        urls.append(self.base_url + href)
-                    elif href.count('/') >= 2:
-                        urls.append(f"{self.base_url}/{href}")
+                        urls.append(f"{self.base_url}{href}")
 
             return list(set(urls))
-        except Exception as e:
-            self.logger.error(f"Page {page_number}: {e}")
+        except:
             return []

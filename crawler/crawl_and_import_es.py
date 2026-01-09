@@ -1,8 +1,12 @@
 
 import time
+import threading
 from datetime import datetime
 from .factory import get_crawler
 from elastic_indexer import ElasticIndexer
+
+# Lock để tránh outputs bị lẫn lộn
+print_lock = threading.Lock()
 
 
 class UnifiedCrawler:
@@ -85,29 +89,50 @@ class UnifiedCrawler:
             self._crawl_once()
 
     def _crawl_once(self):
-        """Run a single crawl cycle for all sources"""
+        """Chạy song song tất cả crawlers"""
         print(f"\n{'='*60}")
-        print(f"Starting crawl cycle")
+        print(f"Starting crawl cycle - PARALLEL MODE")
         print(f"{'='*60}\n")
 
+        threads = []
+
+        # Tạo thread cho mỗi crawler
         for crawler_info in self.crawlers:
-            name = crawler_info['name']
-            article_type = crawler_info['article_type']
-            crawler = crawler_info['instance']
+            thread = threading.Thread(
+                target=self._run_crawler,
+                args=(crawler_info,),
+                daemon=True
+            )
+            threads.append(thread)
+            thread.start()
 
-            print(f"\n--- {name} ({article_type}) ---")
+        # Chờ tất cả threads hoàn thành
+        for thread in threads:
+            thread.join()
 
-            try:
-                crawler.crawl_once()
-                print(f"{name} completed")
-            except Exception as e:
-                print(f"{name} error: {e}")
-
-        # Show stats
+        # Hiển thị thống kê
         self._show_stats()
 
+    def _run_crawler(self, crawler_info):
+        """Chạy một crawler trong thread riêng"""
+        name = crawler_info['name']
+        article_type = crawler_info['article_type']
+        crawler = crawler_info['instance']
+
+        with print_lock:
+            print(f"\n[{name}] Starting ({article_type})...")
+
+        try:
+            crawler.crawl_once()
+            with print_lock:
+                print(f"[{name}] Completed")
+        except Exception as e:
+            with print_lock:
+                print(f"[{name}] Error: {e}")
+
+
     def _crawl_continuous(self):
-        """Run continuous crawling for all sources"""
+        """Chạy liên tục với chế độ song song"""
         cycle = 1
 
         while True:
@@ -116,24 +141,26 @@ class UnifiedCrawler:
                 print(f"CYCLE {cycle} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
                 print(f"{'='*60}")
 
-                # Crawl all sources
+                threads = []
+
+                # Tạo thread cho mỗi crawler
                 for crawler_info in self.crawlers:
-                    name = crawler_info['name']
-                    article_type = crawler_info['article_type']
-                    crawler = crawler_info['instance']
+                    thread = threading.Thread(
+                        target=self._run_crawler,
+                        args=(crawler_info,),
+                        daemon=True
+                    )
+                    threads.append(thread)
+                    thread.start()
 
-                    print(f"\n--- {name} ({article_type}) ---")
+                # Chờ tất cả threads hoàn thành
+                for thread in threads:
+                    thread.join()
 
-                    try:
-                        crawler.crawl_once()
-                        print(f"{name} completed")
-                    except Exception as e:
-                        print(f"{name} error: {e}")
-
-                # Show stats after each cycle
+                # Hiển thị thống kê
                 self._show_stats()
 
-                # Wait for next cycle
+                # Chờ chu kỳ tiếp theo
                 print(f"\n{'='*60}")
                 print(f"Next cycle in {self.crawl_interval}s")
                 print(f"{'='*60}\n")

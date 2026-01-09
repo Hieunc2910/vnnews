@@ -2,8 +2,8 @@ task: type
 output_dpath: result
 
 # Crawler settings
-num_workers: 5
-total_pages: 10
+num_workers: 2
+total_pages: 3
 
 # Continuous crawling
 continuous_mode: true

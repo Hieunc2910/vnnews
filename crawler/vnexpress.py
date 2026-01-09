@@ -12,7 +12,7 @@ class VNExpressCrawler(BaseCrawler):
 
     def extract_content(self, url):
         try:
-            response = requests.get(url, headers=get_headers(), timeout=20)
+            response = requests.get(url, timeout=20)
             soup = BeautifulSoup(response.content, "html.parser")
 
             title = soup.find("h1", class_="title-detail")
@@ -28,7 +28,7 @@ class VNExpressCrawler(BaseCrawler):
             paragraphs = (get_text_from_tag(p) for p in soup.find_all("p", class_="Normal"))
 
             return title.text, date, description, paragraphs
-        except:
+        except Exception as e:
             return None, None, None, None
 
     def write_content(self, url, output_fpath):
