@@ -15,7 +15,7 @@ class VietNamNetCrawler(BaseCrawler):
         try:
             random_delay(0.5, 2)
             response = requests.get(url, headers=get_headers(), timeout=20)
-            response.encoding = 'utf-8'  # Fix encoding
+            response.encoding = 'utf-8'
             soup = BeautifulSoup(response.text, "html.parser")
 
             title = soup.find("h1", class_="content-detail-title")
@@ -54,30 +54,23 @@ class VietNamNetCrawler(BaseCrawler):
             random_delay(1, 3)
             url = f"https://vietnamnet.vn/{article_type}" if page_number == 1 else f"https://vietnamnet.vn/{article_type}-page{page_number - 1}"
             response = requests.get(url, headers=get_headers(), timeout=20)
-            response.encoding = 'utf-8'  # Fix encoding
+            response.encoding = 'utf-8'
             soup = BeautifulSoup(response.text, "html.parser")
 
-            # Thử nhiều selectors khác nhau
             urls = []
 
-            # Tìm tất cả links trong article tags
-            articles = soup.find_all("article")
-            for art in articles:
-                link = art.find("a", href=True)
-                if link and article_type in link['href']:
-                    href = link['href']
-                    full_url = href if self.base_url in href else self.base_url + href
-                    urls.append(full_url)
+            # Tìm theo class names của VietNamNet
+            title_classes = ["horizontalPost__main-title", "vnn-title", "title-bold"]
+            titles = soup.find_all(class_=title_classes)
 
-            # Nếu không tìm thấy, thử tìm links trực tiếp
-            if not urls:
-                all_links = soup.find_all("a", href=True)
-                for link in all_links:
-                    href = link.get('href', '')
-                    if article_type in href and 'vietnamnet.vn' in href:
-                        urls.append(href)
-                    elif article_type in href and href.startswith('/'):
-                        urls.append(self.base_url + href)
+            for title in titles:
+                a_tags = title.find_all("a")
+                if a_tags:
+                    href = a_tags[0].get("href")
+                    if href and href.endswith('.html'):
+                        full_url = href if self.base_url in href else self.base_url + href
+                        urls.append(full_url)
+
 
             return list(set(urls))
         except:
