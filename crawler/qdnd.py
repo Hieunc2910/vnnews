@@ -4,7 +4,6 @@ from bs4 import BeautifulSoup
 from crawler.base_crawler import BaseCrawler
 from utils.bs4_utils import get_text_from_tag
 from utils.date_utils import parse_qdnd_date
-from utils.anti_bot import get_headers, random_delay
 
 
 class QDNDCrawler(BaseCrawler):
@@ -90,11 +89,9 @@ class QDNDCrawler(BaseCrawler):
 
     def get_urls_of_type_thread(self, article_type, page_number):
         try:
-            random_delay(1, 3)
             url = f"{self.base_url}/{article_type}" if page_number == 1 else f"{self.base_url}/{article_type}/p/{page_number}"
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-            response = requests.get(url, headers=headers, timeout=15)
-            soup = BeautifulSoup(response.text, "html.parser")
+            response = requests.get(url, timeout=15)
+            soup = BeautifulSoup(response.content, "html.parser")
             articles = soup.find_all("article")
 
             urls = []

@@ -2,7 +2,6 @@ import requests
 from bs4 import BeautifulSoup
 from crawler.base_crawler import BaseCrawler
 from utils.bs4_utils import get_text_from_tag
-from utils.anti_bot import get_headers, random_delay
 
 
 class DanTriCrawler(BaseCrawler):
@@ -13,10 +12,8 @@ class DanTriCrawler(BaseCrawler):
 
     def extract_content(self, url):
         try:
-            random_delay(0.5, 2)
-            response = requests.get(url, headers=get_headers(), timeout=20)
-            response.encoding = 'utf-8'
-            soup = BeautifulSoup(response.text, "html.parser")
+            response = requests.get(url, timeout=20)
+            soup = BeautifulSoup(response.content, "html.parser")
 
             title = soup.find("h1", class_="title-page detail")
             if not title:
@@ -51,11 +48,9 @@ class DanTriCrawler(BaseCrawler):
 
     def get_urls_of_type_thread(self, article_type, page_number):
         try:
-            random_delay(1, 3)
             url = f"https://dantri.com.vn/{article_type}/trang-{page_number}.htm"
-            response = requests.get(url, headers=get_headers(), timeout=20)
-            response.encoding = 'utf-8'
-            soup = BeautifulSoup(response.text, "html.parser")
+            response = requests.get(url, timeout=20)
+            soup = BeautifulSoup(response.content, "html.parser")
             titles = soup.find_all(class_="article-title")
 
             if not titles:

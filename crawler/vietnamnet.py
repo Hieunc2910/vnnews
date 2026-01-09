@@ -2,7 +2,6 @@ import requests
 from bs4 import BeautifulSoup
 from crawler.base_crawler import BaseCrawler
 from utils.bs4_utils import get_text_from_tag
-from utils.anti_bot import get_headers, random_delay
 
 
 class VietNamNetCrawler(BaseCrawler):
@@ -48,23 +47,19 @@ class VietNamNetCrawler(BaseCrawler):
 
     def get_urls_of_type_thread(self, article_type, page_number):
         try:
-            random_delay(1, 3)
             url = f"{self.base_url}/{article_type}" if page_number == 1 else f"{self.base_url}/{article_type}-page{page_number - 1}"
-            headers = {'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'}
-            response = requests.get(url, headers=headers, timeout=15)
-            soup = BeautifulSoup(response.text, "html.parser")
+            response = requests.get(url, timeout=15)
+            soup = BeautifulSoup(response.content, "html.parser")
 
             urls = []
-            title_classes = ["horizontalPost__main-title", "vnn-title", "title-bold"]
-            titles = soup.find_all(class_=title_classes)
+            titles = soup.find_all(class_=["horizontalPost__main-title", "vnn-title", "title-bold"])
 
             for title in titles:
-                a_tags = title.find_all("a")
-                if a_tags:
-                    href = a_tags[0].get("href")
-                    if href and href.endswith('.html'):
-                        full_url = href if href.startswith(
-                            'http') else f"{self.base_url}{href if href.startswith('/') else '/' + href}"
+                a_tag = title.find("a")
+                if a_tag:
+                    href = a_tag.get("href")
+                    if href:
+                        full_url = href if href.startswith('http') else f"{self.base_url}{href}"
                         urls.append(full_url)
 
             return list(set(urls))

@@ -1,13 +1,13 @@
 task: type
 output_dpath: result
 
-# Crawler settings
-num_workers: 2
+
+num_workers: 1
 total_pages: 3
 
 # Continuous crawling
 continuous_mode: true
-crawl_interval: 30
+crawl_interval: 300
 use_head_check: true
 
 # Elasticsearch integration
@@ -18,8 +18,8 @@ es_index: news_quansu
 #password:
 # Crawlers configuration - list all news sources to crawl
 crawlers:
-  - name: vnexpress
-    article_type: the-gioi/quan-su
+#  - name: vnexpress
+#    article_type: the-gioi/quan-su
 
   - name: dantri
     article_type: the-gioi/quan-su

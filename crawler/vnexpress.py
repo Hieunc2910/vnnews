@@ -2,7 +2,6 @@ import requests
 from bs4 import BeautifulSoup
 from crawler.base_crawler import BaseCrawler
 from utils.bs4_utils import get_text_from_tag
-from utils.anti_bot import get_headers
 
 
 class VNExpressCrawler(BaseCrawler):
@@ -28,7 +27,7 @@ class VNExpressCrawler(BaseCrawler):
             paragraphs = (get_text_from_tag(p) for p in soup.find_all("p", class_="Normal"))
 
             return title.text, date, description, paragraphs
-        except Exception as e:
+        except:
             return None, None, None, None
 
     def write_content(self, url, output_fpath):
@@ -47,22 +46,14 @@ class VNExpressCrawler(BaseCrawler):
 
     def get_urls_of_type_thread(self, article_type, page_number):
         try:
-            page_url = f"https://vnexpress.net/{article_type}-p{page_number}"
-            response = requests.get(page_url, headers=get_headers(), timeout=30)
+            url = f"https://vnexpress.net/{article_type}-p{page_number}"
+            response = requests.get(url, timeout=30)
             soup = BeautifulSoup(response.content, "html.parser")
 
             titles = soup.find_all(class_="title-news")
-
-            if len(titles) == 0:
+            if not titles:
                 return []
 
-            articles_urls = []
-            for title in titles:
-                link = title.find("a")
-                if link:
-                    articles_urls.append(link.get("href"))
-
-            return articles_urls
+            return [t.find("a").get("href") for t in titles if t.find("a")]
         except:
             return []
-
