@@ -1,82 +1,55 @@
-# Vietnamese Military News Crawler
+# Vietnamese Military News Crawler & Search Engine
 
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/)
+[![Elasticsearch](https://img.shields.io/badge/Elasticsearch-8.x-green)](https://www.elastic.co/)
 [![BeautifulSoup4](https://img.shields.io/badge/BeautifulSoup4-latest-purple)](https://pypi.org/project/beautifulsoup4/)
-[![Requests](https://img.shields.io/badge/Requests-latest-black)](https://pypi.org/project/requests/)
-[![Elasticsearch](https://img.shields.io/badge/Elasticsearch-9.x-green)](https://www.elastic.co/)
 
-Hệ thống crawler tin tức quân sự Việt Nam đa nguồn với tích hợp Elasticsearch và tìm kiếm tiếng Việt thông minh.
+Hệ thống thu thập và tìm kiếm tin tức quân sự Việt Nam với Elasticsearch, hỗ trợ tìm kiếm tiếng Việt thông minh.
 
-## Tính Năng Chính
+---
 
-- **Crawl đa nguồn**: Thu thập đồng thời từ 4 báo lớn Việt Nam
-- **Chế độ liên tục**: Tự động crawl theo chu kỳ
-- **Tích hợp Elasticsearch**: Index và tìm kiếm thời gian thực
-- **Tránh duplicate**: Dùng URL làm định danh duy nhất
-- **Xử lý tiếng Việt**: Tìm kiếm có/không dấu đều chính xác
-- **Anti-bot**: Headers và delay tránh bị chặn
-- **Đa luồng**: Xử lý song song tối ưu hiệu suất
+## Tính Năng
 
-## Nguồn Tin Hỗ Trợ
+- **Crawl đa nguồn song song**: Thu thập đồng thời từ 4 báo lớn
+- **Tìm kiếm tiếng Việt**: Xử lý có/không dấu, ranking thông minh
+- **Tránh duplicate**: Dùng title+source làm ID duy nhất
+- **Chế độ liên tục**: Tự động cập nhật theo chu kỳ
+- **Highlight**: Trích đoạn và làm nổi từ khóa
 
-| Nguồn | URL | Chuyên Mục |
-|-------|-----|------------|
-| VNExpress | https://vnexpress.net | the-gioi/quan-su |
-| DanTri | https://dantri.com.vn | the-gioi/quan-su |
-| VietNamNet | https://vietnamnet.vn | the-gioi/quan-su |
-| QDND | https://www.qdnd.vn | quoc-te/quan-su-the-gioi |
+---
 
 ## Cài Đặt
 
-### 1. Cài đặt Python dependencies
+### 1. Python Dependencies
 
 ```bash
-# Tạo virtual environment
 python -m venv venv
-
-# Kích hoạt
 venv\Scripts\activate  # Windows
-source venv/bin/activate  # Linux/Mac
-
-# Cài đặt packages
 pip install -r requirements.txt
 ```
 
-### 2. Cài đặt Elasticsearch (Bắt buộc cho tìm kiếm)
+### 2. Elasticsearch
 
-**Windows:**
+Download từ https://www.elastic.co/downloads/elasticsearch
+
 ```bash
-# Download từ https://www.elastic.co/downloads/elasticsearch
-# Giải nén và chạy:
+# Windows
 bin\elasticsearch.bat
-```
 
-**Linux/Mac:**
-```bash
-# Download và chạy
-wget https://artifacts.elastic.co/downloads/elasticsearch/elasticsearch-8.x.x.tar.gz
-tar -xzf elasticsearch-8.x.x.tar.gz
-cd elasticsearch-8.x.x
+# Linux/Mac
 ./bin/elasticsearch
 ```
 
-Kiểm tra Elasticsearch đã chạy:
-```bash
-curl http://localhost:9200
-```
+Kiểm tra: `curl http://localhost:9200`
 
-## Sử Dụng Nhanh
+---
 
-### Crawl một lần
+## Sử Dụng
+
+### Crawl dữ liệu
 
 ```bash
 python VNNewsCrawler.py --config config_quansu.yml
-```
-
-### Xóa index cũ
-
-```bash
-python delete_index.py
 ```
 
 ### Tìm kiếm
@@ -85,84 +58,451 @@ python delete_index.py
 python search_news.py
 ```
 
+Nhập từ khóa, hệ thống sẽ trả về top 10 bài báo với điểm số và lý do ranking.
+
+### Xóa index cũ
+
+```bash
+python delete_index.py
+```
+
+---
+
 ## Cấu Hình
 
-File: `config_unified_quansu.yml`
+File `config_quansu.yml`:
 
 ```yaml
-# Chế độ crawl
-task: type                    # 'type' = crawl theo chuyên mục, 'url' = crawl URLs cụ thể
-output_dpath: result          # Thư mục lưu kết quả
+task: type
+output_dpath: result
 
-# Hiệu suất
-num_workers: 5                # Số luồng xử lý song song
-total_pages: 10               # Số trang crawl mỗi chuyên mục
+# Crawler settings
+num_workers: 1          # 1 worker tránh bị chặn IP
+total_pages: 3          # Số trang crawl mỗi nguồn
 
-# Chế độ liên tục
-continuous_mode: false        # true = crawl liên tục, false = crawl 1 lần
-crawl_interval: 10800         # Thời gian giữa các lần crawl (giây) - 10800s = 3 giờ
-use_head_check: true          # Kiểm tra URL có thay đổi không trước khi crawl lại
+# Continuous mode
+continuous_mode: true
+crawl_interval: 300     # 5 phút
+use_head_check: true
 
 # Elasticsearch
-enable_elastic: true          # Bật/tắt indexing vào Elasticsearch
-es_url: http://localhost:9200 # URL Elasticsearch
-es_index: news_quansu         # Tên index
+enable_elastic: true
+es_url: http://localhost:9200
+es_index: news_quansu
 
-# Cấu hình crawler cho từng nguồn
+# Nguồn tin
 crawlers:
   - name: vnexpress
     article_type: the-gioi/quan-su
-    
   - name: dantri
     article_type: the-gioi/quan-su
-    
   - name: vietnamnet
     article_type: the-gioi/quan-su
-    
   - name: qdnd
     article_type: quoc-te/quan-su-the-gioi
 ```
 
-### Tùy Chỉnh
+---
 
-**Tăng số trang crawl:**
-```yaml
-total_pages: 20  # Crawl 20 trang thay vì 10
+## Thuật Toán Thu Thập Dữ Liệu
+
+### 1. Kiến Trúc Tổng Quan
+
+```
+┌─────────────────────────────────────────────────────────┐
+│                    VNNewsCrawler                        │
+│  ┌──────────┐  ┌──────────┐  ┌──────────┐  ┌──────────┐ │
+│  │VNExpress │  │  DanTri  │  │VietnamNet│  │   QDND   │ │
+│  │ Crawler  │  │ Crawler  │  │ Crawler  │  │ Crawler  │ │
+│  └────┬─────┘  └────┬─────┘  └────┬─────┘  └────┬─────┘ │
+│       └─────────────┴─────────────┴──────────────┘      │
+│                         │                               │
+│              ┌──────────▼──────────┐                    │
+│              │  Parallel Threads   │                    │
+│              │  (Threading Pool)   │                    │
+│              └──────────┬──────────┘                    │
+└─────────────────────────┼───────────────────────────────┘
+                          │
+                ┌─────────▼──────────┐
+                │  HTML Parser       │
+                │  (BeautifulSoup)   │
+                └─────────┬──────────┘
+                          │
+                ┌─────────▼──────────┐
+                │  Data Normalizer   │
+                │  (Clean & Format)  │
+                └─────────┬──────────┘
+                          │
+        ┌─────────────────┴─────────────────┐
+        │                                   │
+        ▼                                   ▼
+┌───────────────┐                  ┌────────────────┐
+│  File Storage │                  │ Elasticsearch  │
+│  (result/)    │                  │  Index         │
+└───────────────┘                  └────────────────┘
 ```
 
-**Chế độ liên tục với interval 1 giờ:**
-```yaml
-continuous_mode: true
-crawl_interval: 3600  # 1 giờ
+### 2. Thuật Toán Phát Hiện URLs
+
+#### 2.1. VNExpress
+
+```python
+def get_urls_of_type_thread(article_type, page_number):
+    """
+    Phát hiện URLs từ VNExpress
+    Pattern: https://vnexpress.net/the-gioi/quan-su-p{page}
+    Selector: class="title-news"
+    """
+    url = f"https://vnexpress.net/{article_type}-p{page_number}"
+    response = requests.get(url, timeout=30)
+    soup = BeautifulSoup(response.content, "html.parser")
+    
+    # Tìm tất cả elements có class "title-news"
+    titles = soup.find_all(class_="title-news")
+    
+    # Trích xuất href từ thẻ <a>
+    return [t.find("a").get("href") for t in titles if t.find("a")]
 ```
 
-**Tắt Elasticsearch (chỉ lưu file):**
-```yaml
-enable_elastic: false
+**HTML Structure:**
+```html
+<h3 class="title-news">
+    <a href="https://vnexpress.net/article-123.html">Title</a>
+</h3>
 ```
 
-## Thuật Toán Elasticsearch
+#### 2.2. DanTri
 
-### 1. Tổng Quan
+```python
+def get_urls_of_type_thread(article_type, page_number):
+    """
+    Phát hiện URLs từ DanTri
+    Pattern: https://dantri.com.vn/the-gioi/quan-su/trang-{page}.htm
+    Selector: class="article-title"
+    """
+    url = f"https://dantri.com.vn/{article_type}/trang-{page_number}.htm"
+    response = requests.get(url, timeout=20)
+    soup = BeautifulSoup(response.content, "html.parser")
+    
+    titles = soup.find_all(class_="article-title")
+    
+    urls = []
+    for t in titles:
+        link = t.find("a")
+        if link:
+            href = link.get("href")
+            urls.append(href if href.startswith("http") else f"https://dantri.com.vn{href}")
+    return urls
+```
 
-Hệ thống sử dụng Elasticsearch với thuật toán BM25 (Best Matching 25) để tìm kiếm và xếp hạng bài báo. Điểm đặc biệt là xử lý tiếng Việt có dấu/không dấu thông minh.
+#### 2.3. VietnamNet
 
-### 2. Index Mapping
+```python
+def get_urls_of_type_thread(article_type, page_number):
+    """
+    Phát hiện URLs từ VietnamNet
+    Pattern: https://vietnamnet.vn/the-gioi/quan-su-page{N-1}
+    Selector: multiple classes
+    """
+    url = f"https://vietnamnet.vn/{article_type}" if page_number == 1 \
+          else f"https://vietnamnet.vn/{article_type}-page{page_number - 1}"
+    
+    response = requests.get(url, timeout=15)
+    soup = BeautifulSoup(response.content, "html.parser")
+    
+    # VietnamNet có nhiều class khác nhau cho title
+    titles = soup.find_all(class_=[
+        "horizontalPost__main-title",
+        "vnn-title", 
+        "title-bold"
+    ])
+    
+    urls = []
+    for title in titles:
+        a_tag = title.find("a")
+        if a_tag:
+            href = a_tag.get("href")
+            if href:
+                full_url = href if href.startswith('http') \
+                          else f"https://vietnamnet.vn{href}"
+                urls.append(full_url)
+    
+    return list(set(urls))
+```
 
-#### Schema Tối Ưu
+**Đặc điểm:** VietnamNet có nhiều layout khác nhau, cần tìm theo nhiều class.
+
+#### 2.4. QDND
+
+```python
+def get_urls_of_type_thread(article_type, page_number):
+    """
+    Phát hiện URLs từ QDND
+    Pattern: https://www.qdnd.vn/quoc-te/quan-su-the-gioi/p/{page}
+    Selector: <article> tag
+    """
+    url = f"https://www.qdnd.vn/{article_type}" if page_number == 1 \
+          else f"https://www.qdnd.vn/{article_type}/p/{page_number}"
+    
+    response = requests.get(url, timeout=15)
+    soup = BeautifulSoup(response.content, "html.parser")
+    
+    articles = soup.find_all("article")
+    
+    urls = []
+    for art in articles:
+        # Tìm link trong <h3> hoặc trực tiếp trong <article>
+        h3 = art.find("h3")
+        link = h3.find("a", href=True) if h3 else art.find("a", href=True)
+        
+        if link:
+            href = link.get("href")
+            if href.startswith('http'):
+                urls.append(href)
+            elif href.startswith('/'):
+                urls.append(f"https://www.qdnd.vn{href}")
+    
+    return list(set(urls))
+```
+
+**HTML Structure:**
+```html
+<article>
+    <h3>
+        <a href="/quan-su-the-gioi/article-123">Title</a>
+    </h3>
+</article>
+```
+
+### 3. Thuật Toán Crawl Song Song
+
+```python
+class UnifiedCrawler:
+    def _crawl_once(self):
+        """Chạy song song 4 crawlers"""
+        threads = []
+        
+        # Tạo thread cho mỗi crawler
+        for crawler_info in self.crawlers:
+            thread = threading.Thread(
+                target=self._run_crawler,
+                args=(crawler_info,),
+                daemon=True
+            )
+            threads.append(thread)
+            thread.start()
+        
+        # Chờ tất cả threads hoàn thành
+        for thread in threads:
+            thread.join()
+
+    def _run_crawler(self, crawler_info):
+        """Chạy một crawler trong thread riêng"""
+        name = crawler_info['name']
+        crawler = crawler_info['instance']
+        
+        with print_lock:  # Thread-safe printing
+            print(f"[{name}] Starting...")
+        
+        try:
+            crawler.crawl_once()
+            with print_lock:
+                print(f"[{name}] Completed")
+        except Exception as e:
+            with print_lock:
+                print(f"[{name}] Error: {e}")
+```
+
+**Flow:**
+```
+Main Thread
+    │
+    ├──> Thread 1: VNExpress Crawler
+    │         └──> Get URLs → Parse → Save → Index
+    │
+    ├──> Thread 2: DanTri Crawler
+    │         └──> Get URLs → Parse → Save → Index
+    │
+    ├──> Thread 3: VietnamNet Crawler
+    │         └──> Get URLs → Parse → Save → Index
+    │
+    └──> Thread 4: QDND Crawler
+              └──> Get URLs → Parse → Save → Index
+    │
+    Wait all threads complete
+    │
+    Show statistics
+```
+
+### 4. Thuật Toán Trích Xuất Nội Dung
+
+#### 4.1. Parse HTML Structure
+
+Mỗi nguồn có cấu trúc HTML khác nhau:
+
+| Nguồn | Title Selector | Date Selector | Content Selector |
+|-------|----------------|---------------|------------------|
+| VNExpress | `h1.title-detail` | `span.date` | `p.Normal` |
+| DanTri | `h1.title-page.detail` | `time.author-time` | `div.singular-content p` |
+| VietnamNet | `h1.content-detail-title` | `div.bread-crumb-detail__time` | `div.maincontent p` |
+| QDND | `h1` or `meta[og:title]` | `script[ld+json]` | `div.articleContent p` |
+
+#### 4.2. Thuật Toán Parse
+
+```python
+def extract_content(url):
+    """
+    Bước 1: Fetch HTML
+    """
+    response = requests.get(url, timeout=20)
+    soup = BeautifulSoup(response.content, "html.parser")
+    
+    """
+    Bước 2: Extract Title
+    """
+    title = soup.find("h1", class_="title-detail")
+    if not title:
+        return None, None, None, None
+    
+    """
+    Bước 3: Extract Date
+    """
+    date_tag = soup.find("span", class_="date")
+    date = date_tag.text.strip() if date_tag else "N/A"
+    
+    """
+    Bước 4: Extract Description (Sapo/Lead)
+    """
+    desc = soup.find("p", class_="description")
+    description = (get_text_from_tag(p) for p in desc.contents) if desc else ()
+    
+    """
+    Bước 5: Extract Paragraphs
+    """
+    paragraphs = (get_text_from_tag(p) for p in soup.find_all("p", class_="Normal"))
+    
+    return title.text, date, description, paragraphs
+```
+
+#### 4.3. Làm Sạch Text
+
+```python
+def get_text_from_tag(tag):
+    """
+    Xử lý các trường hợp:
+    - NavigableString: text thuần túy
+    - Tag: extract text và loại bỏ HTML
+    - None: return empty
+    """
+    if isinstance(tag, str):
+        return tag.strip()
+    elif hasattr(tag, 'text'):
+        return tag.text.strip()
+    return ""
+```
+
+### 5. Duy Trì Tính Cập Nhật
+
+#### 5.1. Continuous Mode
+
+```python
+def _crawl_continuous(self):
+    """Crawl liên tục theo chu kỳ"""
+    cycle = 1
+    
+    while True:
+        try:
+            print(f"CYCLE {cycle} - {datetime.now()}")
+            
+            # Crawl tất cả sources
+            threads = []
+            for crawler_info in self.crawlers:
+                thread = threading.Thread(
+                    target=self._run_crawler,
+                    args=(crawler_info,)
+                )
+                threads.append(thread)
+                thread.start()
+            
+            for thread in threads:
+                thread.join()
+            
+            # Hiển thị thống kê
+            self._show_stats()
+            
+            # Chờ chu kỳ tiếp theo
+            print(f"Next cycle in {self.crawl_interval}s")
+            time.sleep(self.crawl_interval)
+            cycle += 1
+            
+        except KeyboardInterrupt:
+            print("Stopped by user")
+            break
+```
+
+**Timeline:**
+```
+Cycle 1 (00:00)
+    ├── Crawl 4 sources
+    ├── Index to Elasticsearch
+    └── Stats: 120 articles
+
+Wait 5 minutes...
+
+Cycle 2 (00:05)
+    ├── Crawl 4 sources (new articles)
+    ├── Index to Elasticsearch
+    └── Stats: 125 articles (+5 new)
+
+Wait 5 minutes...
+...
+```
+
+#### 5.2. HEAD Check (Optional)
+
+```python
+def check_url_modified(url):
+    """
+    Kiểm tra URL có thay đổi không bằng HEAD request
+    Tiết kiệm bandwidth
+    """
+    if not self.use_head_check:
+        return True
+    
+    try:
+        response = requests.head(url, timeout=10)
+        
+        # Hash ETag + Last-Modified
+        hash_str = f"{response.headers.get('ETag', '')}" \
+                   f"{response.headers.get('Last-Modified', '')}"
+        url_hash = hashlib.md5(hash_str.encode()).hexdigest()
+        
+        # So sánh với hash cũ
+        if url in self.url_hashes and self.url_hashes[url] == url_hash:
+            return False  # Không thay đổi
+        
+        self.url_hashes[url] = url_hash
+        return True  # Có thay đổi
+    except:
+        return True  # Lỗi = coi như có thay đổi
+```
+
+---
+
+## Cơ Chế Elasticsearch
+
+### 1. Index Mapping
 
 ```python
 {
     "settings": {
+        "number_of_shards": 1,
+        "number_of_replicas": 0,
         "analysis": {
             "analyzer": {
                 "vietnamese_analyzer": {
-                    "tokenizer": "standard",           # Tách từ chuẩn
-                    "filter": [
-                        "lowercase",                    # Chuyển chữ thường
-                        "asciifolding",                 # Bỏ dấu tiếng Việt
-                        "word_delimiter"                # Tách từ ghép
-                    ]
+                    "type": "standard",
+                    "stopwords": "_none_"
                 }
             }
         }
@@ -171,419 +511,215 @@ Hệ thống sử dụng Elasticsearch với thuật toán BM25 (Best Matching 2
         "properties": {
             "title": {
                 "type": "text",
-                "analyzer": "vietnamese_analyzer",
-                "fields": {
-                    "keyword": {"type": "keyword"}      # Exact match
-                }
+                "analyzer": "vietnamese_analyzer"
             },
             "body": {
                 "type": "text",
                 "analyzer": "vietnamese_analyzer"
             },
-            "source": {"type": "keyword"},              # Filter, aggregation
-            "category": {"type": "keyword"},
-            "url": {"type": "keyword"},                 # Unique ID
             "publish_date": {
                 "type": "date",
-                "format": "yyyy-MM-dd"
-            }
+                "format": "yyyy-MM-dd",
+                "ignore_malformed": True
+            },
+            "publish_date_str": {"type": "text"},
+            "source": {"type": "keyword"},
+            "category": {"type": "keyword"},
+            "url": {"type": "keyword"}
         }
     }
 }
 ```
 
-#### Giải Thích Analyzer
+**Giải thích:**
+- `vietnamese_analyzer`: Xử lý tiếng Việt (lowercase, tokenize)
+- `keyword` type: Dùng cho filter và aggregation (không phân tích)
+- `text` type: Dùng cho full-text search (có phân tích)
+- `date` type: Dùng cho range query
 
-**vietnamese_analyzer** xử lý văn bản qua 3 bước:
-
-1. **standard tokenizer**: 
-   - Input: `"Nga thử tên lửa mới"`
-   - Output: `["Nga", "thử", "tên", "lửa", "mới"]`
-
-2. **lowercase filter**:
-   - Input: `["Nga", "thử", "tên", "lửa", "mới"]`
-   - Output: `["nga", "thử", "tên", "lửa", "mới"]`
-
-3. **asciifolding filter**:
-   - Input: `["nga", "thử", "tên", "lửa", "mới"]`
-   - Output: `["nga", "thu", "ten", "lua", "moi"]`
-
-**Kết quả**: Tìm `"ten lua"` (không dấu) vẫn match `"tên lửa"` (có dấu)!
-
-### 3. Tránh Duplicate
-
-#### Thuật Toán
+### 2. Tránh Duplicate bằng Document ID
 
 ```python
-# Dùng URL làm Document ID
-doc_id = hashlib.md5(url.encode()).hexdigest()
-
-# Index với ID cố định
-es.index(index="news", id=doc_id, document={...})
+def parse_article_content(content, source, category, url):
+    """Parse và tạo unique ID"""
+    # ... parse content ...
+    
+    # Tạo ID từ title + source
+    unique_key = f"{title}_{source}"
+    doc_id = hashlib.md5(unique_key.encode()).hexdigest()
+    
+    return {
+        "_id": doc_id,
+        "title": title,
+        "body": body,
+        "source": source,
+        "category": category,
+        "url": url,
+        "publish_date": publish_date,
+        "publish_date_str": publish_date_str
+    }
 ```
 
-#### Flow Chart
-
+**Flow:**
 ```
-┌─────────────────────────┐
-│   Crawl bài báo URL_A   │
-└───────────┬─────────────┘
-            │
-            ▼
-┌─────────────────────────┐
-│  doc_id = MD5(URL_A)    │
-│  => "a1b2c3d4..."       │
-└───────────┬─────────────┘
-            │
-            ▼
-┌─────────────────────────┐
-│  Kiểm tra doc_id        │
-│  đã tồn tại?            │
-└───────┬─────────┬───────┘
-        │         │
-     Có │         │ Không
-        │         │
-        ▼         ▼
-   ┌─────┐    ┌─────┐
-   │UPDATE│    │CREATE│
-   └─────┘    └─────┘
+Article A (DanTri):
+    Title: "Nga thử tên lửa mới"
+    Source: "dantri"
+    → doc_id = MD5("Nga thử tên lửa mới_dantri")
+    → doc_id = "a1b2c3d4..."
+
+Index lần 1:
+    Elasticsearch tạo document với id="a1b2c3d4..."
+
+Crawl lại (lần 2):
+    Article A vẫn có cùng title + source
+    → doc_id = "a1b2c3d4..." (giống lần 1)
+    → Elasticsearch UPDATE thay vì CREATE
+    → Không duplicate!
 ```
 
 **Ưu điểm:**
-- Cùng URL = cùng doc_id = không duplicate
-- Crawl lại = auto update, không tạo mới
-- Không cần field `crawled_at` (gây nhiễu)
+- Cùng bài báo = cùng ID = không duplicate
+- Tự động update nếu nội dung thay đổi
+- Không phụ thuộc vào URL (URL có thể thay đổi)
 
-### 4. Search Algorithm
+### 3. Xử Lý Ngôn Ngữ Tiếng Việt
 
-#### Query Structure
+#### 3.1. Vietnamese Analyzer
+
+```
+Input: "Nga thử tên lửa đạn đạo mới"
+
+Step 1: Standard Tokenizer
+    → ["Nga", "thử", "tên", "lửa", "đạn", "đạo", "mới"]
+
+Step 2: Lowercase Filter
+    → ["nga", "thử", "tên", "lửa", "đạn", "đạo", "mới"]
+
+Step 3: Store in Inverted Index
+    nga     → [doc1, doc5, doc12]
+    thử     → [doc1, doc8]
+    tên     → [doc1, doc3, doc7]
+    lửa     → [doc1, doc3, doc7]
+    ...
+```
+
+#### 3.2. Search Flow
+
+```
+User Query: "ten lua" (không dấu)
+
+Step 1: Analyze Query
+    "ten lua" → ["ten", "lua"]
+
+Step 2: Search in Index
+    Elasticsearch tự động match:
+    - "tên" matches "ten" (similar)
+    - "lửa" matches "lua" (similar)
+
+Step 3: Return Results
+    Documents containing "tên lửa" được trả về
+```
+
+**Lưu ý:** Elasticsearch standard analyzer chưa hoàn hảo cho tiếng Việt. Để tốt hơn, nên:
+- Dùng plugin Vietnamese Analyzer
+- Hoặc dùng asciifolding filter
+- Hoặc normalize ở application level
+
+### 4. Cơ Chế Xếp Hạng (BM25)
+
+#### 4.1. Thuật Toán BM25
+
+```
+score(D, Q) = ∑ IDF(qi) × (f(qi, D) × (k1 + 1)) / (f(qi, D) + k1 × (1 - b + b × |D| / avgdl))
+
+Trong đó:
+- D: Document
+- Q: Query
+- qi: Query term thứ i
+- f(qi, D): Số lần qi xuất hiện trong D
+- |D|: Độ dài document D
+- avgdl: Độ dài trung bình của tất cả documents
+- k1 = 1.2: Tuning parameter
+- b = 0.75: Length normalization
+- IDF: Inverse Document Frequency
+```
+
+#### 4.2. IDF (Inverse Document Frequency)
+
+```
+IDF(qi) = log((N - n(qi) + 0.5) / (n(qi) + 0.5))
+
+Trong đó:
+- N: Tổng số documents
+- n(qi): Số documents chứa qi
+```
+
+**Ý nghĩa:**
+- Từ hiếm (ít documents chứa) → IDF cao → Quan trọng hơn
+- Từ phổ biến (nhiều documents chứa) → IDF thấp → Ít quan trọng
+
+**Ví dụ:**
+```
+N = 1000 documents
+
+Term "tên lửa":
+    n("tên lửa") = 50 documents
+    IDF = log((1000 - 50 + 0.5) / (50 + 0.5))
+        = log(950.5 / 50.5)
+        = log(18.8)
+        = 2.93
+
+Term "mới":
+    n("mới") = 800 documents (rất phổ biến)
+    IDF = log((1000 - 800 + 0.5) / (800 + 0.5))
+        = log(200.5 / 800.5)
+        = log(0.25)
+        = -0.60 (gần 0)
+
+→ "tên lửa" quan trọng hơn "mới" trong ranking
+```
+
+#### 4.3. Multi-field Boosting
 
 ```python
 {
     "query": {
         "bool": {
-            "must": [
+            "should": [
                 {
-                    "multi_match": {
-                        "query": "tên lửa",
-                        "fields": ["title^5", "body"],  # Title boost x5
-                        "type": "best_fields",
-                        "fuzziness": "AUTO"             # Sửa lỗi chính tả
+                    "match_phrase": {
+                        "title": {
+                            "query": "tên lửa",
+                            "boost": 10  # Title boost x10
+                        }
+                    }
+                },
+                {
+                    "match": {
+                        "title": {
+                            "query": "tên lửa",
+                            "boost": 5   # Title partial boost x5
+                        }
+                    }
+                },
+                {
+                    "match": {
+                        "body": {
+                            "query": "tên lửa",
+                            "boost": 1   # Body boost x1
+                        }
                     }
                 }
             ],
-            "should": [
-                {
-                    "multi_match": {
-                        "query": "tên lửa",
-                        "fields": ["title^10", "body^2"],
-                        "type": "phrase",               # Phrase exact
-                        "slop": 2                        # Cho phép 2 từ xen giữa
-                    }
-                }
-            ]
-        }
-    },
-    "highlight": {
-        "fields": {
-            "title": {},
-            "body": {"fragment_size": 150}
+            "minimum_should_match": 1
         }
     }
 }
 ```
 
-#### Scoring Algorithm (BM25)
-
-**Công thức:**
-
-```
-score = IDF × (TF × (k1 + 1)) / (TF + k1 × (1 - b + b × (DL / AVGDL)))
-```
-
-Trong đó:
-- **IDF** (Inverse Document Frequency): Từ hiếm = điểm cao
-- **TF** (Term Frequency): Xuất hiện nhiều lần = điểm cao
-- **DL**: Document Length (độ dài bài báo)
-- **AVGDL**: Average Document Length
-- **k1** = 1.2 (tuning parameter)
-- **b** = 0.75 (length normalization)
-
-#### Ví Dụ Cụ Thể
-
-**Query:** `"tên lửa Nga"`
-
-**Bước 1: Tokenize & Normalize**
-```
-"tên lửa Nga" → ["ten", "lua", "nga"]
-```
-
-**Bước 2: Multi-field Search**
-```
-- Tìm trong title (boost x5)
-- Tìm trong body (boost x1)
-```
-
-**Bước 3: Calculate Score**
-
-Giả sử có 3 bài báo:
-
-| Bài | Title Match | Body Match | Score |
-|-----|-------------|------------|-------|
-| A | "Nga thử **tên lửa** mới" | 5 lần | **15.2** (cao nhất) |
-| B | "Chiến đấu cơ mới" | 3 lần "tên lửa" | 3.8 |
-| C | "Nga công bố..." | 1 lần "tên lửa" | 2.1 |
-
-**Kết quả:** Bài A rank cao nhất vì:
-- Match trong title (x5 boost)
-- Nhiều từ khóa match ("tên lửa" + "Nga")
-
-**Bước 4: Phrase Boost**
-```
-"tên lửa" xuất hiện liền nhau → +10 điểm
-"tên ... lửa" (có 1-2 từ xen giữa) → +5 điểm
-"tên" và "lửa" tách xa → +0 điểm
-```
-
-**Bước 5: Highlight**
-```
-Title: "Nga thử [tên lửa] mới"
-Body: "...Nga vừa thử nghiệm [tên lửa] đạn đạo..."
-```
-
-### 5. Performance Optimization
-
-#### Indexing Speed
-
-```python
-# Thay vì index từng bài:
-for article in articles:
-    es.index(...)  # Chậm!
-
-# Dùng bulk indexing:
-bulk(es, actions)  # Nhanh gấp 10x
-```
-
-#### Search Speed
-
-**Settings tối ưu:**
-```python
-{
-    "number_of_shards": 1,      # 1 shard cho < 100k docs
-    "number_of_replicas": 0,    # Không cần replica khi dev
-    "refresh_interval": "30s"    # Refresh mỗi 30s thay vì 1s
-}
-```
-
-**Kết quả:**
-- Index: 1000 docs/giây
-- Search: < 50ms
-- Storage: ~500KB/document
-
-### 6. Anti-Bot Strategy
-
-#### Headers Rotation
-
-```python
-USER_AGENTS = [
-    'Chrome/120.0.0.0',
-    'Chrome/119.0.0.0',
-    'Firefox/121.0',
-    'Edge/120.0.0.0'
-]
-
-def get_headers():
-    return {
-        'User-Agent': random.choice(USER_AGENTS),
-        'Accept-Language': 'vi-VN,vi;q=0.9',
-        # ... 10+ headers khác
-    }
-```
-
-#### Random Delay
-
-```python
-def random_delay(min_sec=1, max_sec=3):
-    time.sleep(random.uniform(min_sec, max_sec))
-
-# Giữa mỗi request
-for page in pages:
-    random_delay(1, 3)  # Giống người dùng thật
-    crawl_page(page)
-```
-
-**Hiệu quả:**
-- VNExpress: 0 URLs → 150+ URLs
-- Success rate: 95%+
-- Không bị ban IP
-
-### 7. Flow Tổng Thể
-
-```
-┌──────────────┐
-│   Crawler    │ → Lấy HTML từ 4 nguồn
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│  Parser      │ → Trích xuất title, body, date
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│  Normalizer  │ → Làm sạch, format
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│  Indexer     │ → Generate doc_id = MD5(URL)
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│Elasticsearch │ → Index với vietnamese_analyzer
-└──────┬───────┘
-       │
-       ▼
-┌──────────────┐
-│   Search     │ → Multi-match + Phrase + Highlight
-└──────────────┘
-```
-
-### 8. Ví Dụ Thực Tế
-
-**Input Query:**
-```
-"ten lua Nga"  (không dấu)
-```
-
-**Elasticsearch Processing:**
-```
-1. Normalize: "ten lua Nga" → ["ten", "lua", "nga"]
-2. Search in index (đã normalized):
-   - Documents chứa: ["ten", "lua", "nga"]
-   - Match: "tên lửa Nga" (có dấu trong DB)
-3. Calculate scores với BM25
-4. Sort by score DESC
-5. Return top 10
-```
-
-**Output:**
-```
-[1] Nga thử tên lửa đạn đạo mới
-    Score: 15.2
-    Matched: Nga thử [tên lửa] đạn đạo...
-    
-[2] Tên lửa Iskander của Nga
-    Score: 12.8
-    Matched: [Tên lửa] Iskander của [Nga]...
-```
-
-## Tìm Kiếm
-
-### Tính Năng Tìm Kiếm
-
-- **Tìm kiếm tiếng Việt**: Có dấu/không dấu đều được
-- **Title boosting**: Match trong title quan trọng gấp 5 lần
-- **Fuzzy matching**: Tự động sửa lỗi chính tả
-- **Filter theo nguồn**: Tìm trong nguồn cụ thể
-- **Filter theo ngày**: Lọc theo khoảng thời gian
-- **Highlight**: Hiển thị từ khóa matched
-- **Score explanation**: Giải thích tại sao rank cao
-
-
-## Cấu Trúc Output
-
-```
-result/
-├── vnexpress_quansu/
-│   ├── urls/
-│   │   └── the-gioi_quan-su.txt
-│   └── the-gioi_quan-su/
-│       ├── url_001.txt
-│       ├── url_002.txt
-│       └── ...
-├── dantri_quansu/
-├── vietnamnet_quansu/
-└── qdnd_quansu/
-```
-
-Mỗi file bài báo chứa:
-```
-[Tiêu đề]
-Ngày: [Ngày đăng]
-
-[Mô tả/Tóm tắt]
-
-[Nội dung bài báo]
-```
-
-## Hiệu Suất
-
-- **Đa luồng**: Crawl song song với số workers tùy chỉnh
-- **Retry logic**: Tự động retry với exponential backoff
-- **Tránh duplicate**: Bỏ qua URL đã crawl trong chế độ liên tục
-- **Smart HEAD check**: Kiểm tra thay đổi trước khi crawl lại
-- **Bulk indexing**: Index hàng loạt vào Elasticsearch (nhanh gấp 10x)
-
-**Benchmark:**
-- Crawl: 10-15 bài/giây
-- Index: 1000 docs/giây
-- Search: < 50ms
-- Storage: ~500KB/bài báo
-
-## Kiến Trúc Hệ Thống
-
-```
-VNNewsCrawler/
-├── VNNewsCrawler.py              # Entry point chính
-├── crawler/
-│   ├── base_crawler.py           # Base class cho tất cả crawler
-│   ├── unified_crawler.py        # Quản lý crawl đa nguồn
-│   ├── factory.py                # Crawler factory pattern
-│   ├── vnexpress.py              # VNExpress crawler
-│   ├── dantri.py                 # DanTri crawler
-│   ├── vietnamnet.py             # VietNamNet crawler
-│   └── qdnd.py                   # QDND crawler
-├── elastic_indexer.py            # Elasticsearch integration
-├── search_news.py                # Công cụ tìm kiếm
-├── delete_index.py               # Xóa index
-└── utils/
-    ├── bs4_utils.py              # BeautifulSoup utilities
-    ├── date_utils.py             # Xử lý ngày tháng
-    ├── anti_bot.py               # Anti-bot (headers, delays)
-    └── utils.py                  # General utilities
-```
-
-### Design Patterns
-
-**1. Factory Pattern**
-```python
-def get_crawler(webname, **kwargs):
-    crawlers = {
-        'vnexpress': VNExpressCrawler,
-        'dantri': DanTriCrawler,
-        # ...
-    }
-    return crawlers[webname](**kwargs)
-```
-
-**2. Template Method Pattern**
-```python
-class BaseCrawler:
-    def crawl_once(self):
-        urls = self.get_urls()      # Abstract
-        for url in urls:
-            content = self.extract()  # Abstract
-            self.save(content)
-            self.index_to_es(content)
-```
-
-**3. Strategy Pattern**
-```python
-# Mỗi nguồn tin có strategy riêng
-class VNExpressCrawler(BaseCrawler):
-    def extract_content(self, url):
-        # VNExpress-specific logic
-        ...
-```
+**Ý nghĩa:**
+- Match trong **title exact phrase**: điểm × 10
+- Match trong **title partial**: điểm × 5
+- Match trong **body**: điểm × 1
+- → Ưu tiên bài có từ khóa trong tiêu đề

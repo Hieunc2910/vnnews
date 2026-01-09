@@ -3,7 +3,7 @@ output_dpath: result
 
 
 num_workers: 1
-total_pages: 3
+total_pages: 15
 
 # Continuous crawling
 continuous_mode: true
