@@ -4,10 +4,8 @@ from datetime import datetime, timedelta
 def parse_qdnd_date(date_str):
     """
     Parse QDND date format: 2025-05-27T06:31:00+07:00
-    Trả về datetime object
     """
     try:
-        # Loại bỏ timezone (+07:00) vì datetime.strptime không xử lý được
         if '+' in date_str:
             date_str = date_str.split('+')[0]
         elif 'Z' in date_str:

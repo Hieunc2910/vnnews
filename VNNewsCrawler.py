@@ -1,16 +1,21 @@
 import argparse
-from logger import log
 from utils import utils
 from crawler.factory import get_crawler
+from crawler.crawl_and_import_es import UnifiedCrawler
 
 
 def main(config_fpath):
     config = utils.get_config(config_fpath)
-    log.setup_logging(log_dir=config["output_dpath"],
-                      config_fpath=config.get("logger_fpath", "logger/logger_config.yml"))
 
     try:
-        crawler = get_crawler(**config)
+        # Check if unified mode (multiple crawlers)
+        if 'crawlers' in config and config['crawlers']:
+            print("Running in UNIFIED mode (multiple sources)")
+            crawler = UnifiedCrawler(**config)
+        else:
+            print("Running in SINGLE mode")
+            crawler = get_crawler(**config)
+
         crawler.start_crawling()
     except KeyboardInterrupt:
         print("\nStopped")
@@ -20,9 +25,7 @@ def main(config_fpath):
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="VN Military News Crawler")
-    parser.add_argument("--config", default="config_vnexpress.yml", help="Config file")
-    parser.add_argument("--interval", type=int, help="Interval (seconds)")
-    parser.add_argument("--continuous", action="store_true", help="Continuous mode")
+    parser.add_argument("--config", default="config_quansu.yml", help="Config file")
 
     args = parser.parse_args()
     main(args.config)

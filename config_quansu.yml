@@ -1,0 +1,32 @@
+task: type
+output_dpath: result
+
+# Crawler settings
+num_workers: 5
+total_pages: 10
+
+# Continuous crawling
+continuous_mode: true
+crawl_interval: 30
+use_head_check: true
+
+# Elasticsearch integration
+enable_elastic: true
+es_url: http://localhost:9200
+es_index: news_quansu
+#username:
+#password:
+# Crawlers configuration - list all news sources to crawl
+crawlers:
+  - name: vnexpress
+    article_type: the-gioi/quan-su
+
+  - name: dantri
+    article_type: the-gioi/quan-su
+
+  - name: vietnamnet
+    article_type: the-gioi/quan-su
+
+  - name: qdnd
+    article_type: quoc-te/quan-su-the-gioi
+

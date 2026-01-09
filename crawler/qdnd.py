@@ -1,25 +1,24 @@
 import requests
 import json
-import time
 from bs4 import BeautifulSoup
-from tqdm import tqdm
-from logger import log
 from crawler.base_crawler import BaseCrawler
 from utils.bs4_utils import get_text_from_tag
-from utils.date_utils import parse_qdnd_date, is_recent_article
+from utils.date_utils import parse_qdnd_date
+from utils.anti_bot import get_headers, random_delay
 
 
 class QDNDCrawler(BaseCrawler):
 
     def __init__(self, **kwargs):
-        super().__init__(**kwargs)  # Gọi __init__ của BaseCrawler trước
-        self.logger = log.get_logger(name=__name__)
+        super().__init__(**kwargs)
         self.base_url = "https://www.qdnd.vn"
 
     def extract_content(self, url):
         try:
-            response = requests.get(url, timeout=20)
-            soup = BeautifulSoup(response.content, "html.parser")
+            random_delay(0.5, 2)
+            response = requests.get(url, headers=get_headers(), timeout=20)
+            response.encoding = 'utf-8'
+            soup = BeautifulSoup(response.text, "html.parser")
 
             title = soup.find("h1")
             if not title:
@@ -90,7 +89,6 @@ class QDNDCrawler(BaseCrawler):
         """Format ISO date sang định dạng tiếng Việt"""
         if not date_str or date_str == "N/A":
             return date_str
-
         try:
             dt = parse_qdnd_date(date_str)
             if not dt:
@@ -104,13 +102,14 @@ class QDNDCrawler(BaseCrawler):
 
     def get_urls_of_type_thread(self, article_type, page_number):
         try:
+            random_delay(1, 3)
             url = f"{self.base_url}/{article_type}" if page_number == 1 else f"{self.base_url}/{article_type}/p/{page_number}"
-            response = requests.get(url, timeout=20)
-            soup = BeautifulSoup(response.content, "html.parser")
+            response = requests.get(url, headers=get_headers(), timeout=20)
+            response.encoding = 'utf-8'
+            soup = BeautifulSoup(response.text, "html.parser")
             articles = soup.find_all("article")
 
             if not articles:
-                self.logger.debug(f"No articles on page {page_number}")
                 return []
 
             urls = []
@@ -131,93 +130,3 @@ class QDNDCrawler(BaseCrawler):
         except Exception as e:
             self.logger.error(f"Page {page_number}: {e}")
             return []
-
-    def get_urls_with_time_filter(self, article_type):
-        """Lấy URLs với bộ lọc thời gian - chỉ crawl đến khi gặp bài cũ"""
-        urls = []
-        consecutive_old_pages = 0
-        pbar = tqdm(desc="Pages", unit="p", ncols=70)
-
-        for page in range(1, self.total_pages + 1):
-            # Dừng nếu 3 trang liên tiếp toàn bài cũ
-            if consecutive_old_pages >= 3:
-                self.logger.info(f"Stopped: 3 consecutive pages with old articles")
-                break
-
-            try:
-                page_url = f"{self.base_url}/{article_type}" if page == 1 else f"{self.base_url}/{article_type}/p/{page}"
-                response = requests.get(page_url, timeout=20)
-                soup = BeautifulSoup(response.content, "html.parser")
-                articles = soup.find_all("article")
-
-                if not articles:
-                    break
-
-                page_has_recent = False
-                for art in articles:
-                    h3 = art.find("h3")
-                    link = h3.find("a", href=True) if h3 else art.find("a", href=True)
-                    if not link:
-                        continue
-
-                    href = link.get("href")
-                    if href.startswith('http'):
-                        url = href
-                    elif href.startswith('/'):
-                        url = self.base_url + href
-                    elif href.count('/') >= 2:
-                        url = f"{self.base_url}/{href}"
-                    else:
-                        continue
-
-                    # Delay nhỏ giữa các request
-                    time.sleep(0.5)
-
-                    try:
-                        art_response = requests.get(url, timeout=20)
-                        art_soup = BeautifulSoup(art_response.content, "html.parser")
-
-                        # Tìm date
-                        date = None
-                        for script in art_soup.find_all('script', type='application/ld+json'):
-                            try:
-                                data = json.loads(script.string)
-                                if isinstance(data, dict) and 'datePublished' in data:
-                                    date = data['datePublished']
-                                    break
-                                elif isinstance(data, list):
-                                    for item in data:
-                                        if isinstance(item, dict) and 'datePublished' in item:
-                                            date = item['datePublished']
-                                            break
-                            except:
-                                pass
-
-                        if not date:
-                            date_tag = art_soup.find("time")
-                            date = date_tag.get("datetime") or date_tag.text.strip() if date_tag else None
-
-                        # Kiểm tra tuổi bài viết
-                        if date and is_recent_article(date, self.max_days_old, parse_qdnd_date):
-                            urls.append(url)
-                            page_has_recent = True
-                        elif not date:
-                            # Không parse được date, thêm vào để an toàn
-                            urls.append(url)
-                            page_has_recent = True
-
-                    except Exception as e:
-                        self.logger.debug(f"Error checking {url}: {e}")
-                        urls.append(url)
-                        page_has_recent = True
-
-                consecutive_old_pages = 0 if page_has_recent else consecutive_old_pages + 1
-                pbar.update(1)
-
-            except Exception as e:
-                self.logger.error(f"Error on page {page}: {e}")
-                break
-
-        pbar.close()
-        self.logger.info(f"Found {len(urls)} recent articles (≤{self.max_days_old} days)")
-        return list(set(urls))
