@@ -3,7 +3,7 @@
 [![Python 3.12](https://img.shields.io/badge/python-3.12-blue)](https://www.python.org/)
 [![BeautifulSoup4](https://img.shields.io/badge/BeautifulSoup4-latest-purple)](https://pypi.org/project/beautifulsoup4/)
 [![Requests](https://img.shields.io/badge/Requests-latest-black)](https://pypi.org/project/requests/)
-[![Elasticsearch](https://img.shields.io/badge/Elasticsearch-8.x-green)](https://www.elastic.co/)
+[![Elasticsearch](https://img.shields.io/badge/Elasticsearch-9.x-green)](https://www.elastic.co/)
 
 Hệ thống crawler tin tức quân sự Việt Nam đa nguồn với tích hợp Elasticsearch và tìm kiếm tiếng Việt thông minh.
 
@@ -634,95 +634,4 @@ class VNExpressCrawler(BaseCrawler):
     def extract_content(self, url):
         # VNExpress-specific logic
         ...
-```
-
-## Xử Lý Lỗi
-
-### Lỗi Thường Gặp
-
-**1. Connection refused (Elasticsearch)**
-```
-Elasticsearch chưa chạy!
-→ Khởi động: bin\elasticsearch.bat
-```
-
-**2. Found 0 URLs (Anti-bot)**
-```
-Website chặn bot!
-→ Headers và delays đã được thêm tự động
-→ Có thể tăng delay trong utils/anti_bot.py
-```
-
-**3. Aggregation error**
-```
-Field 'source' không phải keyword!
-→ Xóa index: python delete_index.py
-→ Chạy lại: python VNNewsCrawler.py
-```
-
-**4. Duplicate documents**
-```
-Không thể xảy ra!
-→ URL làm _id nên tự động update thay vì tạo mới
-```
-
-## Best Practices
-
-### Crawling
-
-✅ **NÊN:**
-- Dùng `continuous_mode` cho crawl định kỳ
-- Set `use_head_check: true` để tránh crawl lại
-- Giảm `num_workers` nếu bị chặn
-- Crawl trong giờ thấp điểm (đêm)
-
-❌ **KHÔNG NÊN:**
-- Crawl quá nhiều trang một lúc
-- Set `crawl_interval` < 3600s (1 giờ)
-- Tắt anti-bot headers
-- Ignore errors và retry liên tục
-
-### Elasticsearch
-
-✅ **NÊN:**
-- Xóa index khi thay đổi mapping
-- Dùng bulk indexing cho nhiều docs
-- Set `number_of_replicas: 0` khi dev
-- Backup index thường xuyên
-
-❌ **KHÔNG NÊN:**
-- Index từng doc một (chậm)
-- Dùng text field cho aggregation
-- Quên xóa index cũ khi update mapping
-- Lưu field không cần thiết (crawled_at)
-
-## Troubleshooting
-
-### Debug Mode
-
-```python
-# Trong crawler
-import logging
-logging.basicConfig(level=logging.DEBUG)
-```
-
-### Kiểm Tra Elasticsearch
-
-```bash
-# Xem tất cả indices
-curl http://localhost:9200/_cat/indices
-
-# Đếm documents
-curl http://localhost:9200/news_quansu/_count
-
-# Xem mapping
-curl http://localhost:9200/news_quansu/_mapping
-
-# Test search
-curl -X POST "http://localhost:9200/news_quansu/_search" -H 'Content-Type: application/json' -d'
-{
-  "query": {"match": {"title": "tên lửa"}},
-  "size": 5
-}
-'
 ```
