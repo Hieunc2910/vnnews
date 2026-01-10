@@ -137,9 +137,7 @@ class UnifiedCrawler:
 
         while True:
             try:
-                print(f"\n{'='*60}")
                 print(f"CYCLE {cycle} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-                print(f"{'='*60}")
 
                 threads = []
 
@@ -157,13 +155,7 @@ class UnifiedCrawler:
                 for thread in threads:
                     thread.join()
 
-                # Hiển thị thống kê
                 self._show_stats()
-
-                # Chờ chu kỳ tiếp theo
-                print(f"\n{'='*60}")
-                print(f"Next cycle in {self.crawl_interval}s")
-                print(f"{'='*60}\n")
                 time.sleep(self.crawl_interval)
                 cycle += 1
 
