@@ -1,0 +1,564 @@
+================================================================================
+        BÁO CÁO KỸ THUẬT HỆ THỐNG TÌM KIẾM TIN TỨC QUÂN SỰ VIỆT NAM
+================================================================================
+
+Tên dự án: Vietnamese Military News Crawler & Search Engine
+Ngày báo cáo: 11/01/2026
+Phiên bản: 2.0
+
+================================================================================
+CHƯƠNG 1: TỔNG QUAN
+================================================================================
+
+1.1. Mục tiêu đề tài
+--------------------
+
+Xây dựng hệ thống thu thập tự động và tìm kiếm tin tức quân sự từ các nguồn
+báo điện tử Việt Nam. Hệ thống cho phép người dùng tìm kiếm nhanh chóng các
+bài báo liên quan thông qua từ khóa tiếng Việt với độ chính xác cao, đồng
+thời giải thích lý do xếp hạng của mỗi kết quả.
+
+Các mục tiêu cụ thể:
+- Thu thập song song từ 4 nguồn: VNExpress, Dân Trí, VietnamNet, QDND
+- Đánh chỉ mục tự động vào Elasticsearch với hỗ trợ tiếng Việt
+- Tìm kiếm toàn văn với xếp hạng thông minh dựa trên BM25
+- Xử lý tìm kiếm có dấu và không dấu với mức độ ưu tiên khác nhau
+- Hiển thị kết quả với điểm số và trích đoạn giải thích
+
+1.2. Kiến trúc tổng quan
+------------------------
+
+Quy trình xử lý của hệ thống gồm 5 giai đoạn:
+
+    Thu thập dữ liệu → Đánh chỉ mục → Xử lý truy vấn → Xếp hạng → Trả về kết quả
+    (Crawling)        (Indexing)     (Query Processing) (Ranking)  (Results)
+
+Sơ đồ luồng dữ liệu:
+
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │                           NGUỒN DỮ LIỆU                                 │
+    │     VNExpress ──┬── Dân Trí ──┬── VietnamNet ──┬── QDND                 │
+    └─────────────────┼─────────────┼────────────────┼────────────────────────┘
+                      v             v                v
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │                        THU THẬP DỮ LIỆU                                 │
+    │  ┌────────────────────────────────────────────────────────────────┐     │
+    │  │ UnifiedCrawler (Song song - Multi-threading)                   │     │
+    │  │ - Phát hiện URL bài báo từ trang danh sách                     │     │
+    │  │ - Trích xuất nội dung: tiêu đề, ngày, nội dung                 │     │
+    │  └────────────────────────────────────────────────────────────────┘     │
+    └─────────────────────────────────┬───────────────────────────────────────┘
+                                      v
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │                        ĐÁNH CHỈ MỤC                                     │
+    │  ┌────────────────────────────────────────────────────────────────┐     │
+    │  │ ElasticIndexer                                                 │     │
+    │  │ - Parse nội dung, tạo Document ID (MD5 của title + source)     │     │
+    │  │ - Phân tích từ: ICU Tokenizer + Stopwords tiếng Việt           │     │
+    │  │ - Lưu trữ 2 phiên bản: có dấu và không dấu                     │     │
+    │  └────────────────────────────────────────────────────────────────┘     │
+    └─────────────────────────────────┬───────────────────────────────────────┘
+                                      v
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │                     ELASTICSEARCH INDEX                                 │
+    │  ┌────────────────────────────────────────────────────────────────┐     │
+    │  │ Index: news_quansu                                             │     │
+    │  │ - Inverted Index cho title, body (có dấu)                      │     │
+    │  │ - Inverted Index cho title.no_accent, body.no_accent           │     │
+    │  │ - Metadata: source, category, publish_date, url                │     │
+    │  └────────────────────────────────────────────────────────────────┘     │
+    └─────────────────────────────────┬───────────────────────────────────────┘
+                                      v
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │                        TÌM KIẾM VÀ XẾP HẠNG                             │
+    │  ┌────────────────────────────────────────────────────────────────┐     │
+    │  │ Search Engine                                                  │     │
+    │  │ - Multi-match query với 4 mức độ ưu tiên                       │     │
+    │  │ - BM25 scoring với field boosting                              │     │
+    │  │ - Highlight từ khóa trong kết quả                              │     │
+    │  └────────────────────────────────────────────────────────────────┘     │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+================================================================================
+CHƯƠNG 2: THU THẬP VÀ XỬ LÝ DỮ LIỆU
+================================================================================
+
+2.1. Nguồn dữ liệu và phạm vi
+-----------------------------
+
+Hệ thống thu thập tin tức quân sự từ 4 nguồn báo điện tử lớn tại Việt Nam:
+
+    ┌────────────┬────────────────────────────────────┬──────────────────────┐
+    │ Nguồn      │ URL gốc                            │ Chuyên mục           │
+    ├────────────┼────────────────────────────────────┼──────────────────────┤
+    │ VNExpress  │ https://vnexpress.net              │ the-gioi/quan-su     │
+    │ Dân Trí    │ https://dantri.com.vn              │ the-gioi/quan-su     │
+    │ VietnamNet │ https://vietnamnet.vn              │ the-gioi/quan-su     │
+    │ QDND       │ https://www.qdnd.vn                │ quoc-te/quan-su-the-gioi │
+    └────────────┴────────────────────────────────────┴──────────────────────┘
+
+Phạm vi thu thập:
+- Số trang danh sách: 10 trang mỗi nguồn (cấu hình được)
+- Tần suất cập nhật: 30 phút/lần (chế độ liên tục)
+- Ước tính: 200-300 URL mới mỗi lần quét
+
+2.2. Chi tiết kỹ thuật trích xuất theo nguồn tin
+-------------------------------------------------
+
+Mỗi nguồn tin có cấu trúc HTML khác nhau, yêu cầu bộ trích xuất riêng:
+
+A. VNExpress:
+   - Tiêu đề:    <h1 class="title-detail">
+   - Ngày tháng: <span class="date">
+   - Mô tả:      <p class="description">
+   - Nội dung:   <p class="Normal">
+   - Đặc điểm:   Có cơ chế chống bot, cần xử lý timeout
+
+B. Dân Trí:
+   - Tiêu đề:    <h1 class="title-page">
+   - Ngày tháng: <span class="author-time">
+   - Mô tả:      <div class="singular-sapo">
+   - Nội dung:   <div class="singular-content">
+   - Đặc điểm:   Sử dụng response.content để xử lý encoding
+
+C. VietnamNet:
+   - Tiêu đề:    <h1 class="content-detail-title">
+   - Ngày tháng: <span class="time">
+   - Mô tả:      <h2 class="content-detail-sapo">
+   - Nội dung:   <div class="main-content"> với các thẻ <p>
+   - Đặc điểm:   Cần xử lý charset detection
+
+D. QDND:
+   - Tiêu đề:    <h1 class="detail-title">
+   - Ngày tháng: <span class="time-update">
+   - Mô tả:      <h2 class="detail-sapo">
+   - Nội dung:   <div class="detail-content"> với các thẻ <p>
+   - Đặc điểm:   Sử dụng response.content để tránh lỗi decode
+
+2.3. Giải thuật phát hiện liên kết
+----------------------------------
+
+Thuật toán phát hiện URL bài báo từ trang danh sách:
+
+    INPUT:  article_type (chuyên mục), total_pages (số trang)
+    OUTPUT: unique_urls (tập hợp URL không trùng lặp)
+
+    1. Khởi tạo unique_urls = ∅
+    2. FOR page = 1 TO total_pages DO
+    3.     page_url ← construct_url(article_type, page)
+    4.     html_content ← HTTP_GET(page_url, timeout=30s)
+    5.     article_links ← parse_links(html_content, pattern)
+    6.     unique_urls ← unique_urls ∪ article_links
+    7. END FOR
+    8. RETURN unique_urls
+
+Trong đó:
+- construct_url(): Tạo URL trang danh sách theo định dạng của từng nguồn
+- parse_links(): Sử dụng BeautifulSoup4 để trích xuất thẻ <a> trong các
+  class đặc trưng của từng nguồn
+
+2.4. Kiến trúc Crawler
+----------------------
+
+Hệ thống sử dụng mô hình Factory Pattern để quản lý các crawler:
+
+    BaseCrawler (Abstract Base Class)
+         │
+         ├─── VNExpressCrawler (với cơ chế phát hiện block)
+         ├─── DanTriCrawler
+         ├─── VietnamNetCrawler
+         └─── QDNDCrawler
+
+    UnifiedCrawler
+         │
+         └─── Điều phối chạy song song các crawler con
+
+Các phương thức chính của BaseCrawler:
+- get_urls_of_type_thread(): Lấy danh sách URL từ trang danh sách
+- extract_content(): Trích xuất nội dung từ URL bài báo
+- write_content(): Ghi nội dung ra file
+- crawl_once(): Thực hiện một chu kỳ crawl
+
+2.5. Quy trình xử lý và làm sạch dữ liệu
+-----------------------------------------
+
+Thuật toán xử lý nội dung bài báo:
+
+    INPUT:  raw_content (nội dung thô), source, category, url
+    OUTPUT: structured_document (tài liệu có cấu trúc)
+
+    1. lines ← SPLIT(raw_content, '\n')
+    2. IF lines = ∅ THEN RETURN NULL
+    3.
+    4. title ← TRIM(lines[0])
+    5.
+    6. // Trích xuất ngày tháng
+    7. IF LENGTH(lines) > 1 AND "Ngày:" ∈ lines[1] THEN
+    8.     date_str ← EXTRACT_DATE(lines[1])
+    9.     publish_date ← PARSE_DATE(date_str, "dd/MM/yyyy")
+    10.    body_start ← 2
+    11. ELSE
+    12.    body_start ← 1
+    13. END IF
+    14.
+    15. body ← JOIN(lines[body_start:], '\n')
+    16.
+    17. // Tạo định danh duy nhất để tránh trùng lặp
+    18. unique_key ← CONCAT(title, "_", source)
+    19. doc_id ← MD5(unique_key)
+    20.
+    21. RETURN {
+    22.    "_id": doc_id,
+    23.    "title": title,
+    24.    "publish_date": publish_date,
+    25.    "body": body,
+    26.    "source": source,
+    27.    "category": category,
+    28.    "url": url
+    29. }
+
+Chiến lược tránh trùng lặp (Deduplication):
+- Sử dụng title + source làm khóa định danh
+- Áp dụng hàm băm MD5 để tạo Document ID
+- Elasticsearch tự động update nếu ID đã tồn tại
+
+2.6. Cơ chế cập nhật dữ liệu
+----------------------------
+
+Hệ thống hỗ trợ hai chế độ hoạt động:
+
+A. Chế độ chạy một lần (Single Mode):
+   - Crawl tất cả các nguồn một lần
+   - Phù hợp cho thu thập dữ liệu ban đầu
+
+B. Chế độ liên tục (Continuous Mode):
+   - Lặp lại quá trình crawl theo chu kỳ
+   - Khoảng cách mặc định: 1800 giây (30 phút)
+   - Tự động reset trạng thái block của VNExpress mỗi chu kỳ
+
+Thuật toán chế độ liên tục:
+
+    INPUT:  crawlers[], crawl_interval
+    OUTPUT: Cập nhật liên tục database
+
+    1. cycle ← 1
+    2. WHILE TRUE DO
+    3.     // Reset trạng thái block cho VNExpress
+    4.     FOR EACH crawler IN crawlers DO
+    5.         IF crawler HAS reset_blocked_status THEN
+    6.             crawler.reset_blocked_status()
+    7.         END IF
+    8.     END FOR
+    9.
+    10.    // Chạy song song các crawler
+    11.    PARALLEL FOR EACH crawler IN crawlers DO
+    12.        crawler.crawl_once()
+    13.    END PARALLEL FOR
+    14.
+    15.    show_statistics()
+    16.    SLEEP(crawl_interval)
+    17.    cycle ← cycle + 1
+    18. END WHILE
+
+Cơ chế phát hiện block của VNExpress:
+- Đếm số lần timeout liên tục (consecutive_timeouts)
+- Nếu consecutive_timeouts ≥ 3: đánh dấu is_blocked = True
+- Khi is_blocked = True: bỏ qua tất cả request, không làm chậm các crawler khác
+- Reset về False ở chu kỳ tiếp theo
+
+2.7. Chiến lược lưu trữ
+-----------------------
+
+Dữ liệu được lưu trữ ở hai nơi:
+
+A. File hệ thống (Backup):
+   - Đường dẫn: result/{source}_quansu/{category}/url_{id}.txt
+   - Định dạng: Plain text với tiêu đề, ngày, nội dung
+
+B. Elasticsearch (Primary):
+   - Index: news_quansu
+   - Hỗ trợ tìm kiếm toàn văn
+   - Inverted index tự động
+
+================================================================================
+CHƯƠNG 3: ĐÁNH CHỈ MỤC VÀ CẤU HÌNH ELASTICSEARCH
+================================================================================
+
+3.1. Thiết kế Schema
+--------------------
+
+Index news_quansu được thiết kế với các trường sau:
+
+    ┌──────────────────┬───────────┬────────────────────────────────────────┐
+    │ Trường           │ Kiểu      │ Mô tả                                  │
+    ├──────────────────┼───────────┼────────────────────────────────────────┤
+    │ title            │ text      │ Tiêu đề bài báo (có dấu)               │
+    │ title.no_accent  │ text      │ Tiêu đề không dấu (sub-field)          │
+    │ body             │ text      │ Nội dung bài báo (có dấu)              │
+    │ body.no_accent   │ text      │ Nội dung không dấu (sub-field)         │
+    │ publish_date     │ date      │ Ngày đăng (yyyy-MM-dd)                 │
+    │ publish_date_str │ text      │ Ngày đăng dạng chuỗi gốc               │
+    │ source           │ keyword   │ Nguồn tin (cho aggregation)            │
+    │ category         │ keyword   │ Chuyên mục                             │
+    │ url              │ keyword   │ Đường dẫn gốc                          │
+    └──────────────────┴───────────┴────────────────────────────────────────┘
+
+Cấu hình index:
+- number_of_shards: 1 (phù hợp dataset nhỏ-trung bình)
+- number_of_replicas: 0 (single node deployment)
+
+3.2. Cấu hình Phân tích từ (Text Analysis)
+------------------------------------------
+
+Hệ thống sử dụng plugin ICU (International Components for Unicode) của
+Elasticsearch để xử lý tiếng Việt:
+
+A. Vietnamese Analyzer (có dấu):
+   - Tokenizer: icu_tokenizer
+   - Filters: icu_normalizer → lowercase → vietnamese_stop
+
+B. Vietnamese No Accent Analyzer (không dấu):
+   - Tokenizer: icu_tokenizer
+   - Filters: icu_normalizer → lowercase → icu_folding → vietnamese_stop
+
+Các thành phần:
+- icu_tokenizer: Tách từ theo chuẩn Unicode, xử lý tốt các ngôn ngữ châu Á
+- icu_normalizer: Chuẩn hóa Unicode (NFC normalization)
+- icu_folding: Chuyển đổi ký tự có dấu thành không dấu
+
+Danh sách Stopwords tiếng Việt (60+ từ):
+- Đại từ: tôi, họ, nó, ông, bà...
+- Liên từ/giới từ: và, của, trong, với, để, cho...
+- Trợ từ: là, đã, đang, sẽ, được, bị...
+- Chỉ định: này, đó, kia, ấy...
+- Số lượng: các, những, một, nhiều...
+
+Quy trình tokenize:
+
+    Input:  "Quân đội Việt Nam tập trận ở Biển Đông"
+
+    Vietnamese Analyzer:
+    → ["quân", "đội", "việt", "nam", "tập", "trận", "biển", "đông"]
+    (Loại bỏ "ở" vì là stopword)
+
+    Vietnamese No Accent:
+    → ["quan", "doi", "viet", "nam", "tap", "tran", "bien", "dong"]
+
+3.3. Quy trình Indexing
+-----------------------
+
+Thuật toán index một bài báo:
+
+    INPUT:  article (tài liệu đã parse)
+    OUTPUT: success/failure
+
+    1. doc_id ← article["_id"]
+    2. doc_body ← {k: v | (k, v) ∈ article AND k ≠ "_id"}
+    3.
+    4. TRY
+    5.     elasticsearch.index(
+    6.         index = "news_quansu",
+    7.         id = doc_id,
+    8.         document = doc_body
+    9.     )
+    10.    RETURN TRUE
+    11. CATCH Exception
+    12.    RETURN FALSE
+
+Đặc điểm:
+- Sử dụng doc_id để thực hiện upsert (insert hoặc update)
+- Nếu doc_id đã tồn tại: cập nhật document
+- Nếu doc_id chưa có: thêm mới document
+
+Bulk Indexing:
+- Sử dụng Elasticsearch Bulk API để tăng tốc
+- Giảm số lượng HTTP round-trips
+- Throughput tăng 10-50 lần so với single insert
+
+Cấu trúc Inverted Index được Elasticsearch tự động xây dựng:
+
+    Term          → Document IDs
+    ─────────────────────────────
+    quân          → [doc1, doc3, doc7]
+    đội           → [doc1, doc3]
+    tên           → [doc2, doc5, doc8]
+    lửa           → [doc2, doc5, doc8]
+    iskander      → [doc2, doc9]
+    ...
+
+================================================================================
+CHƯƠNG 4: CƠ CHẾ TÌM KIẾM VÀ XẾP HẠNG
+================================================================================
+
+4.1. Xây dựng truy vấn (Query Construction)
+-------------------------------------------
+
+Hệ thống sử dụng Bool Query với 4 mức độ ưu tiên:
+
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │                           BOOL QUERY                                    │
+    │  ┌───────────────────────────────────────────────────────────────────┐ │
+    │  │ MUST (bắt buộc ít nhất 1 trong các SHOULD match)                  │ │
+    │  │  ┌─────────────────────────────────────────────────────────────┐  │ │
+    │  │  │ SHOULD clauses (minimum_should_match = 1):                  │  │ │
+    │  │  │                                                             │  │ │
+    │  │  │ 1. Match có dấu chính xác (boost = 10)                     │  │ │
+    │  │  │    fields: title^5, body                                    │  │ │
+    │  │  │                                                             │  │ │
+    │  │  │ 2. Phrase match có dấu (boost = 15)                        │  │ │
+    │  │  │    fields: title^10, body^2, slop = 2                      │  │ │
+    │  │  │                                                             │  │ │
+    │  │  │ 3. Match không dấu (boost = 7.5)                            │  │ │
+    │  │  │    fields: title.no_accent^5, body.no_accent               │  │ │
+    │  │  │                                                             │  │ │
+    │  │  │ 4. Fuzzy match (boost = 2)                                 │  │ │
+    │  │  │    fields: title^5, body, fuzziness = AUTO                 │  │ │
+    │  │  └─────────────────────────────────────────────────────────────┘  │ │
+    │  └───────────────────────────────────────────────────────────────────┘ │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+Giải thích các mức độ ưu tiên:
+
+    ┌──────┬────────────────────────────┬───────┬────────────────────────────┐
+    │ STT  │ Loại match                 │ Boost │ Mục đích                   │
+    ├──────┼────────────────────────────┼───────┼────────────────────────────┤
+    │ 1    │ Phrase match có dấu        │ 15    │ Ưu tiên cao nhất cho cụm   │
+    │      │                            │       │ từ khớp chính xác          │
+    ├──────┼────────────────────────────┼───────┼────────────────────────────┤
+    │ 2    │ Match có dấu               │ 10    │ Từ có dấu khớp chính xác   │
+    ├──────┼────────────────────────────┼───────┼────────────────────────────┤
+    │ 3    │ Match không dấu            │ 4     │ Fallback khi người dùng    │
+    │      │                            │       │ không gõ dấu               │
+    ├──────┼────────────────────────────┼───────┼────────────────────────────┤
+    │ 4    │ Fuzzy match                │ 2     │ Xử lý lỗi chính tả         │
+    └──────┴────────────────────────────┴───────┴────────────────────────────┘
+
+Field Boosting:
+- title^5: Match trong tiêu đề được nhân 5 lần điểm
+- title^10: Phrase match trong tiêu đề được nhân 10 lần
+- body^2: Phrase match trong nội dung được nhân 2 lần
+
+4.2. Thuật toán Xếp hạng
+------------------------
+
+Elasticsearch sử dụng thuật toán BM25 (Best Matching 25) làm cơ sở tính điểm.
+
+Công thức BM25:
+
+    Score(D,Q) = Σ IDF(qᵢ) × [f(qᵢ,D) × (k₁ + 1)] / [f(qᵢ,D) + k₁ × (1 - b + b × |D|/avgdl)]
+
+Trong đó:
+- D: Document (tài liệu/bài báo)
+- Q: Query (truy vấn)
+- qᵢ: Term thứ i trong query
+- f(qᵢ,D): Tần suất term qᵢ xuất hiện trong D (Term Frequency - TF)
+- |D|: Độ dài document D (số từ)
+- avgdl: Độ dài trung bình của tất cả documents
+- k₁: Tham số điều chỉnh TF saturation (mặc định: 1.2)
+- b: Tham số điều chỉnh ảnh hưởng độ dài document (mặc định: 0.75)
+
+Công thức IDF (Inverse Document Frequency):
+
+    IDF(qᵢ) = ln(1 + (N - n(qᵢ) + 0.5) / (n(qᵢ) + 0.5))
+
+Trong đó:
+- N: Tổng số documents trong index
+- n(qᵢ): Số documents chứa term qᵢ
+
+Ý nghĩa các thành phần:
+
+A. Term Frequency (TF):
+   - Từ xuất hiện nhiều lần → điểm cao hơn
+   - Nhưng có giới hạn (saturation) để tránh spam từ khóa
+
+B. Inverse Document Frequency (IDF):
+   - Từ hiếm (ít documents chứa) → điểm cao hơn
+   - Từ phổ biến (nhiều documents chứa) → điểm thấp hơn
+
+C. Document Length Normalization:
+   - Bài ngắn có từ khớp → điểm cao hơn bài dài
+   - Tham số b điều chỉnh mức độ ảnh hưởng
+
+Điểm cuối cùng của document:
+
+    Final_Score = BM25_Score × Field_Boost × Query_Boost
+
+Xử lý lỗi chính tả (Fuzziness):
+- Sử dụng khoảng cách Levenshtein (edit distance)
+- Fuzziness = "AUTO":
+  + Từ 1-2 ký tự: không cho phép sai
+  + Từ 3-5 ký tự: cho phép sai 1 ký tự
+  + Từ >5 ký tự: cho phép sai 2 ký tự
+
+Phrase Matching với Slop:
+- slop = 2: Cho phép tối đa 2 từ xen giữa các terms
+- Điểm giảm dần theo slop (slop=0 cao nhất, slop=2 thấp hơn)
+
+Chiến lược sắp xếp kết quả:
+1. Primary: _score (giảm dần) - Bài điểm cao hơn lên trước
+2. Secondary: publish_date (giảm dần) - Nếu cùng điểm, bài mới hơn lên trước
+
+4.3. Cơ chế Hiển thị và Trích đoạn (Highlighting)
+-------------------------------------------------
+
+Mục đích: Giải thích cho người dùng tại sao bài báo được chọn và xếp hạng.
+
+Cấu hình highlighting:
+
+    ┌─────────────────────────────────────────────────────────────────────────┐
+    │ Title Highlighting:                                                     │
+    │ - pre_tags: ["<mark>"]                                                  │
+    │ - post_tags: ["</mark>"]                                                │
+    │ - number_of_fragments: 0 (hiển thị toàn bộ tiêu đề)                    │
+    ├─────────────────────────────────────────────────────────────────────────┤
+    │ Body Highlighting:                                                      │
+    │ - pre_tags: ["<mark>"]                                                  │
+    │ - post_tags: ["</mark>"]                                                │
+    │ - fragment_size: 150 (ký tự mỗi đoạn)                                  │
+    │ - number_of_fragments: 3 (top 3 đoạn tốt nhất)                         │
+    └─────────────────────────────────────────────────────────────────────────┘
+
+Quy trình highlighting:
+1. Elasticsearch tìm các đoạn văn bản chứa query terms
+2. Đánh dấu terms bằng thẻ <mark>
+3. Trích xuất 3 đoạn tốt nhất từ body (mỗi đoạn tối đa 150 ký tự)
+4. Trích xuất toàn bộ tiêu đề nếu có match
+
+Kết quả trả về cho mỗi document:
+- score: Điểm xếp hạng
+- matched_in_title: Tiêu đề với từ khóa được đánh dấu
+- matched_in_body: Các đoạn trích với từ khóa được đánh dấu
+
+================================================================================
+CHƯƠNG 5: KẾT LUẬN
+================================================================================
+
+Hệ thống Vietnamese Military News Crawler & Search Engine đã triển khai thành
+công một pipeline hoàn chỉnh từ thu thập dữ liệu đến tìm kiếm và xếp hạng.
+
+Các thành tựu đạt được:
+
+1. Thu thập dữ liệu:
+   - Crawl song song từ 4 nguồn báo lớn
+   - Xử lý anti-bot của VNExpress
+   - Tránh trùng lặp hiệu quả với MD5 hash
+
+2. Xử lý tiếng Việt:
+   - ICU tokenizer cho chuẩn Unicode
+   - Stopwords tiếng Việt (60+ từ)
+   - Hỗ trợ tìm kiếm có dấu và không dấu
+
+3. Tìm kiếm thông minh:
+   - 4 mức độ ưu tiên: phrase > có dấu > không dấu > fuzzy
+   - BM25 ranking với field boosting
+   - Highlight giải thích kết quả
+
+Hướng phát triển:
+- Tích hợp Vietnamese NLP (VnCoreNLP, Underthesea) cho word segmentation
+- Semantic search với sentence embeddings (PhoBERT)
+- Query suggestion và auto-complete
+
+================================================================================
+HẾT BÁO CÁO
+================================================================================
+
