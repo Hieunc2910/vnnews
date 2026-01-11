@@ -39,6 +39,10 @@ class ElasticIndexer:
 
         # Vietnamese stopwords
         vietnamese_stopwords = [
+            # Đại từ
+            "tôi", "tao", "mình", "ta", "chúng tôi", "chúng ta", "họ", "nó", "ông", "bà",
+            "anh", "chị", "em", "cô", "chú", "cậu", "mày", "thằng", "con", "nó",
+            # Chức năng ngữ pháp
             "bị", "bởi", "cả", "các", "cái", "cần", "càng", "chỉ", "chiếc", "cho",
             "chứ", "chưa", "chuyện", "có", "có thể", "cứ", "của", "cùng", "cũng",
             "đã", "đang", "đây", "để", "đến nỗi", "đều", "điều", "do", "đó",

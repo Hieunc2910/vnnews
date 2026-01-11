@@ -371,7 +371,8 @@ B. Token Filters:
 C. Analysis Chain:
    Text → Tokenizer → Filter 1 → Filter 2 → ... → Final Tokens
 
-Danh sách Stopwords tiếng Việt (70+ từ):
+Danh sách Stopwords tiếng Việt (80+ từ):
+- Đại từ: tôi, tao, mình, ta, chúng tôi, chúng ta, họ, nó, ông, bà, anh, chị, em...
 - Chức năng ngữ pháp: bị, bởi, cho, của, từ, với, theo, tại, qua, ra...
 - Định lượng và chỉ định: cả, các, cái, mỗi, một cách, này, đó, những...
 - Liên từ và trạng từ: và, nhưng, như, nên, nếu, vì, mà, rất, rồi...
@@ -627,7 +628,7 @@ Các thành tựu đạt được:
 
 2. Xử lý tiếng Việt:
    - ICU tokenizer cho chuẩn Unicode
-   - Stopwords tiếng Việt (60+ từ)
+   - Stopwords tiếng Việt (80+ từ)
    - Hỗ trợ tìm kiếm có dấu và không dấu
 
 3. Tìm kiếm thông minh:
