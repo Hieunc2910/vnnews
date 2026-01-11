@@ -43,7 +43,7 @@ Sơ đồ luồng dữ liệu:
     ┌─────────────────────────────────────────────────────────────────────────┐
     │                        THU THẬP DỮ LIỆU                                 │
     │  ┌────────────────────────────────────────────────────────────────┐     │
-    │  │ UnifiedCrawler (Song song - Multi-threading)                   │     │
+    │  │ UnifiedCrawler                                                 │     │
     │  │ - Phát hiện URL bài báo từ trang danh sách                     │     │
     │  │ - Trích xuất nội dung: tiêu đề, ngày, nội dung                 │     │
     │  └────────────────────────────────────────────────────────────────┘     │
