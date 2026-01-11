@@ -62,18 +62,22 @@ class ElasticIndexer:
                         "vietnamese_stop": {
                             "type": "stop",
                             "stopwords": vietnamese_stopwords
+                        },
+                        "ascii_folding": {
+                            "type": "asciifolding",
+                            "preserve_original": False
                         }
                     },
                     "analyzer": {
                         "vietnamese_analyzer": {
                             "type": "custom",
-                            "tokenizer": "icu_tokenizer",
-                            "filter": ["icu_normalizer", "lowercase", "vietnamese_stop"]
+                            "tokenizer": "standard",
+                            "filter": ["lowercase", "vietnamese_stop"]
                         },
                         "vietnamese_no_accent": {
                             "type": "custom",
-                            "tokenizer": "icu_tokenizer",
-                            "filter": ["icu_normalizer", "lowercase", "icu_folding", "vietnamese_stop"]
+                            "tokenizer": "standard",
+                            "filter": ["lowercase", "ascii_folding", "vietnamese_stop"]
                         }
                     }
                 }

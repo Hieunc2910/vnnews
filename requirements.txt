@@ -3,4 +3,4 @@ requests>=2.28.1
 urllib3>=1.26.0
 tqdm>=4.64.1
 pyyaml>=6.0.1
-
+elasticsearch>=9.2.1
