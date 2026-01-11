@@ -37,6 +37,27 @@ class ElasticIndexer:
         if self.es.indices.exists(index=self.index_name):
             return
 
+        # Stopwords tiếng Việt phổ biến
+        vietnamese_stopwords = [
+            # Đại từ
+            "tôi", "tao", "mình", "ta", "chúng tôi", "chúng ta", "họ", "nó", "ông", "bà",
+            # Liên từ, giới từ
+            "và", "hoặc", "hay", "nhưng", "mà", "nên", "vì", "do", "bởi", "để", "cho",
+            "với", "của", "từ", "đến", "trong", "ngoài", "trên", "dưới", "giữa",
+            # Trợ từ, phụ từ
+            "là", "thì", "mới", "đã", "đang", "sẽ", "vẫn", "còn", "cũng", "lại",
+            "rồi", "rất", "quá", "lắm", "hơn", "nhất", "được", "bị", "phải",
+            # Chỉ định
+            "này", "đó", "kia", "ấy", "đây", "nọ",
+            # Số lượng
+            "các", "những", "mọi", "mỗi", "một", "hai", "nhiều", "ít", "vài",
+            # Nghi vấn
+            "gì", "nào", "sao", "đâu", "bao", "mấy",
+            # Khác
+            "có", "không", "chưa", "đều", "cả", "theo", "về", "ra", "vào",
+            "lên", "xuống", "sang", "qua", "lại", "nữa", "thêm", "bớt"
+        ]
+
         settings = {
             "settings": {
                 "number_of_shards": 1,
@@ -45,23 +66,19 @@ class ElasticIndexer:
                     "filter": {
                         "vietnamese_stop": {
                             "type": "stop",
-                            "stopwords": "_none_"
-                        },
-                        "vietnamese_folding": {
-                            "type": "asciifolding",
-                            "preserve_original": False
+                            "stopwords": vietnamese_stopwords
                         }
                     },
                     "analyzer": {
                         "vietnamese_analyzer": {
                             "type": "custom",
-                            "tokenizer": "standard",
-                            "filter": ["lowercase", "vietnamese_stop"]
+                            "tokenizer": "icu_tokenizer",
+                            "filter": ["icu_normalizer", "lowercase", "vietnamese_stop"]
                         },
                         "vietnamese_no_accent": {
                             "type": "custom",
-                            "tokenizer": "standard",
-                            "filter": ["lowercase", "vietnamese_folding", "vietnamese_stop"]
+                            "tokenizer": "icu_tokenizer",
+                            "filter": ["icu_normalizer", "lowercase", "icu_folding", "vietnamese_stop"]
                         }
                     }
                 }

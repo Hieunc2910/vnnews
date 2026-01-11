@@ -120,15 +120,15 @@ class UnifiedCrawler:
         crawler = crawler_info['instance']
 
         with print_lock:
-            print(f"\n[{name}] Starting ({article_type})...")
+            print(f"\n--- {name} ({article_type}) ---")
 
         try:
             crawler.crawl_once()
             with print_lock:
-                print(f"[{name}] Completed")
+                print(f"{name} completed")
         except Exception as e:
             with print_lock:
-                print(f"[{name}] Error: {e}")
+                print(f"{name} error: {e}")
 
 
     def _crawl_continuous(self):
@@ -137,7 +137,14 @@ class UnifiedCrawler:
 
         while True:
             try:
+                print(f"\n{'='*60}")
                 print(f"CYCLE {cycle} - {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                print(f"{'='*60}\n")
+
+                for crawler_info in self.crawlers:
+                    crawler = crawler_info['instance']
+                    if hasattr(crawler, 'reset_blocked_status'):
+                        crawler.reset_blocked_status()
 
                 threads = []
 
@@ -156,6 +163,11 @@ class UnifiedCrawler:
                     thread.join()
 
                 self._show_stats()
+
+                print(f"\n{'='*60}")
+                print(f"Next cycle in {self.crawl_interval}s")
+                print(f"{'='*60}\n")
+
                 time.sleep(self.crawl_interval)
                 cycle += 1
 
