@@ -112,7 +112,8 @@ A. VNExpress:
    - Ngày tháng: <span class="date">
    - Mô tả:      <p class="description">
    - Nội dung:   <p class="Normal">
-   - Đặc điểm:   Có cơ chế chống bot, cần xử lý timeout
+   - Đặc điểm:   Có cơ chế chống bot mạnh, chặn theo dải IP/mạng
+   - Xử lý:      Phát hiện block sau 3 timeout liên tục, dừng crawl tự động
 
 B. Dân Trí:
    - Tiêu đề:    <h1 class="title-page">
@@ -261,10 +262,26 @@ Thuật toán chế độ liên tục:
     18. END WHILE
 
 Cơ chế phát hiện block của VNExpress:
-- Đếm số lần timeout liên tục (consecutive_timeouts)
-- Nếu consecutive_timeouts ≥ 3: đánh dấu is_blocked = True
-- Khi is_blocked = True: bỏ qua tất cả request, không làm chậm các crawler khác
-- Reset về False ở chu kỳ tiếp theo
+
+VNExpress triển khai hệ thống chống bot tinh vi với các đặc điểm:
+
+A. Cơ chế chặn:
+   - Chặn theo dải IP/subnet thay vì IP đơn lẻ
+   - Thời gian chặn kéo dài (30+ phút)
+   - Chỉ có thể bypass bằng VPN hoặc đổi mạng hoàn toàn
+   - Không phân biệt thiết bị, chặn toàn bộ mạng
+
+B. Thuật toán phát hiện trong hệ thống:
+   - Đếm số lần timeout liên tục (consecutive_timeouts)
+   - Nếu consecutive_timeouts ≥ 3: đánh dấu is_blocked = True
+   - Khi is_blocked = True: bỏ qua tất cả request, không làm chậm các crawler khác
+   - Reset về False ở chu kỳ tiếp theo
+
+C. Lợi ích của cách xử lý hiện tại:
+   - Phát hiện block nhanh chóng (sau 3 request)
+   - Không làm chậm toàn hệ thống
+   - 3/4 nguồn dữ liệu vẫn hoạt động bình thường
+   - Tự động thử lại ở chu kỳ tiếp theo
 
 2.7. Chiến lược lưu trữ
 -----------------------
@@ -307,6 +324,23 @@ Cấu hình index:
 - number_of_shards: 1 (phù hợp dataset nhỏ-trung bình)
 - number_of_replicas: 0 (single node deployment)
 
+Giải thích các thuật ngữ Elasticsearch quan trọng:
+
+A. Field Types:
+   - text: Được phân tích (analyzed) để tìm kiếm full-text
+   - keyword: Không phân tích, dùng cho exact match, aggregation, sorting
+   - date: Kiểu ngày tháng với format cụ thể
+
+B. Multi-fields:
+   - title.no_accent: Sub-field của title với analyzer khác
+   - Cho phép cùng một dữ liệu được index theo nhiều cách
+   - Ví dụ: title (có dấu) và title.no_accent (không dấu)
+
+C. Index Settings:
+   - Shards: Phân chia dữ liệu để tăng tốc độ tìm kiếm và song song hóa
+   - Replicas: Sao chép dữ liệu để đảm bảo high availability
+   - Analysis: Cấu hình cách xử lý và phân tích văn bản
+
 3.2. Cấu hình Phân tích từ (Text Analysis)
 ------------------------------------------
 
@@ -321,10 +355,21 @@ B. Vietnamese No Accent Analyzer (không dấu):
    - Tokenizer: icu_tokenizer
    - Filters: icu_normalizer → lowercase → icu_folding → vietnamese_stop
 
-Các thành phần:
-- icu_tokenizer: Tách từ theo chuẩn Unicode, xử lý tốt các ngôn ngữ châu Á
-- icu_normalizer: Chuẩn hóa Unicode (NFC normalization)
-- icu_folding: Chuyển đổi ký tự có dấu thành không dấu
+Giải thích các thành phần Text Analysis:
+
+A. Tokenizer:
+   - Nhiệm vụ: Tách văn bản thành các tokens (từ đơn)
+   - icu_tokenizer: Tách từ theo chuẩn Unicode, xử lý tốt các ngôn ngữ châu Á
+   - So với standard tokenizer: Hiểu ngữ pháp Unicode thay vì chỉ tách theo khoảng trắng
+
+B. Token Filters:
+   - icu_normalizer: Chuẩn hóa Unicode (NFC normalization), xử lý ký tự đặc biệt
+   - lowercase: Chuyển tất cả về chữ thường để tìm kiếm case-insensitive
+   - icu_folding: Chuyển đổi ký tự có dấu thành không dấu (á→a, ñ→n)
+   - vietnamese_stop: Loại bỏ stopwords tiếng Việt
+
+C. Analysis Chain:
+   Text → Tokenizer → Filter 1 → Filter 2 → ... → Final Tokens
 
 Danh sách Stopwords tiếng Việt (60+ từ):
 - Đại từ: tôi, họ, nó, ông, bà...
@@ -377,14 +422,44 @@ Bulk Indexing:
 
 Cấu trúc Inverted Index được Elasticsearch tự động xây dựng:
 
-    Term          → Document IDs
-    ─────────────────────────────
-    quân          → [doc1, doc3, doc7]
-    đội           → [doc1, doc3]
-    tên           → [doc2, doc5, doc8]
-    lửa           → [doc2, doc5, doc8]
-    iskander      → [doc2, doc9]
+Inverted Index là cấu trúc dữ liệu cốt lõi cho tìm kiếm full-text:
+
+    Term          → Document IDs + Metadata
+    ─────────────────────────────────────────
+    quân          → [doc1, doc3, doc7] (TF: [3,1,2], Positions: [...])
+    đội           → [doc1, doc3] (TF: [2,1], Positions: [...])
+    tên           → [doc2, doc5, doc8] (TF: [1,2,1], Positions: [...])
+    lửa           → [doc2, doc5, doc8] (TF: [3,1,4], Positions: [...])
+    iskander      → [doc2, doc9] (TF: [2,1], Positions: [...])
     ...
+
+Giải thích các thành phần Inverted Index:
+
+A. Term Dictionary:
+   - Danh sách tất cả các terms (từ) xuất hiện trong corpus
+   - Được sắp xếp theo thứ tự alphabet để tìm kiếm nhanh
+   - Mỗi term liên kết với posting list
+
+B. Posting List:
+   - Danh sách documents chứa term đó
+   - Term Frequency (TF): Số lần term xuất hiện trong mỗi document
+   - Positions: Vị trí của term trong document (cho phrase query)
+
+C. Document Frequency (DF):
+   - Số documents chứa term đó
+   - Dùng để tính IDF (Inverse Document Frequency)
+
+Quy trình tìm kiếm với Inverted Index:
+
+Query: "tên lửa iskander"
+1. Tokenize: ["tên", "lửa", "iskander"]
+2. Lookup từng term trong Term Dictionary
+3. Lấy posting lists:
+   - "tên" → [doc2, doc5, doc8]
+   - "lửa" → [doc2, doc5, doc8]
+   - "iskander" → [doc2, doc9]
+4. Intersect/Union các lists theo query type
+5. Tính BM25 score cho từng document
 
 ================================================================================
 CHƯƠNG 4: CƠ CHẾ TÌM KIẾM VÀ XẾP HẠNG
@@ -427,7 +502,7 @@ Giải thích các mức độ ưu tiên:
     ├──────┼────────────────────────────┼───────┼────────────────────────────┤
     │ 2    │ Match có dấu               │ 10    │ Từ có dấu khớp chính xác   │
     ├──────┼────────────────────────────┼───────┼────────────────────────────┤
-    │ 3    │ Match không dấu            │ 4     │ Fallback khi người dùng    │
+    │ 3    │ Match không dấu            │ 7.5   │ Fallback khi người dùng    │
     │      │                            │       │ không gõ dấu               │
     ├──────┼────────────────────────────┼───────┼────────────────────────────┤
     │ 4    │ Fuzzy match                │ 2     │ Xử lý lỗi chính tả         │
@@ -465,19 +540,27 @@ Trong đó:
 - N: Tổng số documents trong index
 - n(qᵢ): Số documents chứa term qᵢ
 
-Ý nghĩa các thành phần:
+Ý nghĩa các thành phần BM25:
 
 A. Term Frequency (TF):
    - Từ xuất hiện nhiều lần → điểm cao hơn
    - Nhưng có giới hạn (saturation) để tránh spam từ khóa
+   - Saturation: TF càng tăng, điểm tăng chậm dần (logarithmic)
 
 B. Inverse Document Frequency (IDF):
    - Từ hiếm (ít documents chứa) → điểm cao hơn
    - Từ phổ biến (nhiều documents chứa) → điểm thấp hơn
+   - Ví dụ: "iskander" hiếm → IDF cao, "và" phổ biến → IDF thấp
 
 C. Document Length Normalization:
    - Bài ngắn có từ khớp → điểm cao hơn bài dài
    - Tham số b điều chỉnh mức độ ảnh hưởng
+   - b = 0: không chuẩn hóa, b = 1: chuẩn hóa hoàn toàn
+
+D. Saturation Parameter (k₁):
+   - Điều chỉnh mức độ saturation của TF
+   - k₁ càng cao → TF ảnh hưởng mạnh hơn
+   - k₁ = 0: TF không ảnh hưởng, chỉ có IDF
 
 Điểm cuối cùng của document:
 
