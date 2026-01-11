@@ -105,36 +105,53 @@ Phạm vi thu thập:
 2.2. Chi tiết kỹ thuật trích xuất theo nguồn tin
 -------------------------------------------------
 
-Mỗi nguồn tin có cấu trúc HTML khác nhau, yêu cầu bộ trích xuất riêng:
+Hệ thống sử dụng phương pháp xử lý đồng nhất cho tất cả các nguồn tin:
 
-A. VNExpress:
-   - Tiêu đề:    <h1 class="title-detail">
-   - Ngày tháng: <span class="date">
-   - Mô tả:      <p class="description">
-   - Nội dung:   <p class="Normal">
-   - Đặc điểm:   Có cơ chế chống bot mạnh, chặn theo dải IP/mạng
-   - Xử lý:      Phát hiện block sau 3 timeout liên tục, dừng crawl tự động
+**Phương pháp chung:**
+- Sử dụng `requests.get()` với timeout 20s
+- Parse bằng `BeautifulSoup(response.content, "html.parser")`
+- Trích xuất theo cấu trúc HTML đặc thù của từng site
+- Xử lý encoding tự động bởi BeautifulSoup
 
-B. Dân Trí:
-   - Tiêu đề:    <h1 class="title-page">
-   - Ngày tháng: <span class="author-time">
-   - Mô tả:      <div class="singular-sapo">
-   - Nội dung:   <div class="singular-content">
-   - Đặc điểm:   Sử dụng response.content để xử lý encoding
+**Cấu trúc HTML của từng nguồn:**
 
-C. VietnamNet:
-   - Tiêu đề:    <h1 class="content-detail-title">
-   - Ngày tháng: <span class="time">
-   - Mô tả:      <h2 class="content-detail-sapo">
-   - Nội dung:   <div class="main-content"> với các thẻ <p>
-   - Đặc điểm:   Cần xử lý charset detection
+    ┌─────────────┬─────────────────────┬─────────────────────┬─────────────────────┐
+    │ Nguồn       │ Tiêu đề             │ Ngày tháng          │ Nội dung            │
+    ├─────────────┼─────────────────────┼─────────────────────┼─────────────────────┤
+    │ VNExpress   │ h1.title-detail     │ span.date           │ p.Normal            │
+    │ Dân Trí     │ h1.title-page       │ time.author-time    │ div.singular-content│
+    │ VietnamNet  │ h1.content-detail-  │ div.bread-crumb-    │ div.main-content    │
+    │             │ title               │ detail__time        │                     │
+    │ QDND        │ h1 / og:title       │ JSON-LD data        │ div.detail-content  │
+    └─────────────┴─────────────────────┴─────────────────────┴─────────────────────┘
 
-D. QDND:
-   - Tiêu đề:    <h1 class="detail-title">
-   - Ngày tháng: <span class="time-update">
-   - Mô tả:      <h2 class="detail-sapo">
-   - Nội dung:   <div class="detail-content"> với các thẻ <p>
-   - Đặc điểm:   Sử dụng response.content để tránh lỗi decode
+**Đặc điểm riêng biệt của VNExpress:**
+
+VNExpress là nguồn duy nhất có cơ chế chống bot nghiêm ngặt:
+
+- **Cơ chế chặn**: Chặn theo dải IP/subnet thay vì IP đơn lẻ
+- **Thời gian chặn**: Kéo dài 30+ phút, chỉ bypass được bằng VPN
+- **Phát hiện bot**: Dựa trên pattern và tần suất request
+
+**Xử lý đặc biệt cho VNExpress:**
+```
+Thuật toán phát hiện block:
+1. Đếm consecutive_timeouts cho mỗi request timeout
+2. Nếu consecutive_timeouts ≥ 3: đánh dấu is_blocked = True
+3. Khi is_blocked = True: bỏ qua tất cả request tiếp theo
+4. Reset trạng thái ở chu kỳ crawl tiếp theo
+```
+
+**Lợi ích của cách xử lý:**
+- Phát hiện block nhanh chóng (sau 3 timeout)
+- Không làm chậm 3 crawler còn lại
+- Tự động thử lại ở chu kỳ tiếp theo
+- 75% dữ liệu vẫn được thu thập bình thường
+
+**Ba nguồn còn lại (Dân Trí, VietnamNet, QDND):**
+- Hoạt động ổn định, không có cơ chế chống bot
+- Xử lý đồng nhất với timeout tiêu chuẩn
+- Ít khi gặp lỗi, tỷ lệ thành công cao
 
 2.3. Giải thuật phát hiện liên kết
 ----------------------------------
@@ -344,32 +361,30 @@ C. Index Settings:
 3.2. Cấu hình Phân tích từ (Text Analysis)
 ------------------------------------------
 
-Hệ thống sử dụng plugin ICU (International Components for Unicode) của
-Elasticsearch để xử lý tiếng Việt:
+Hệ thống sử dụng analyzer chuẩn của Elasticsearch để xử lý tiếng Việt:
 
 A. Vietnamese Analyzer (có dấu):
-   - Tokenizer: icu_tokenizer
-   - Filters: icu_normalizer → lowercase → vietnamese_stop
+   - Tokenizer: standard
+   - Filters: lowercase → vietnamese_stop
 
 B. Vietnamese No Accent Analyzer (không dấu):
-   - Tokenizer: icu_tokenizer
-   - Filters: icu_normalizer → lowercase → icu_folding → vietnamese_stop
+   - Tokenizer: standard
+   - Filters: lowercase → ascii_folding → vietnamese_stop
 
 Giải thích các thành phần Text Analysis:
 
 A. Tokenizer:
    - Nhiệm vụ: Tách văn bản thành các tokens (từ đơn)
-   - icu_tokenizer: Tách từ theo chuẩn Unicode, xử lý tốt các ngôn ngữ châu Á
-   - So với standard tokenizer: Hiểu ngữ pháp Unicode thay vì chỉ tách theo khoảng trắng
+   - standard: Tokenizer chuẩn của Elasticsearch, tách theo khoảng trắng và dấu câu
+   - Xử lý Unicode cơ bản, phù hợp cho tiếng Việt
 
 B. Token Filters:
-   - icu_normalizer: Chuẩn hóa Unicode (NFC normalization), xử lý ký tự đặc biệt
    - lowercase: Chuyển tất cả về chữ thường để tìm kiếm case-insensitive
-   - icu_folding: Chuyển đổi ký tự có dấu thành không dấu (á→a, ñ→n)
+   - ascii_folding: Chuyển đổi ký tự có dấu thành không dấu (á→a, đ→d)
    - vietnamese_stop: Loại bỏ stopwords tiếng Việt
 
 C. Analysis Chain:
-   Text → Tokenizer → Filter 1 → Filter 2 → ... → Final Tokens
+   Text → standard tokenizer → lowercase → ascii_folding/stop → Final Tokens
 
 Danh sách Stopwords tiếng Việt (80+ từ):
 - Đại từ: tôi, tao, mình, ta, chúng tôi, chúng ta, họ, nó, ông, bà, anh, chị, em...
@@ -382,7 +397,7 @@ Quy trình tokenize:
 
     Input:  "Quân đội Việt Nam tập trận ở Biển Đông"
 
-    Vietnamese Analyzer:
+    Vietnamese Analyzer (standard tokenizer):
     → ["quân", "đội", "việt", "nam", "tập", "trận", "biển", "đông"]
     (Loại bỏ "ở" vì là stopword)
 
@@ -472,24 +487,24 @@ Hệ thống sử dụng Bool Query với 4 mức độ ưu tiên:
 
     ┌─────────────────────────────────────────────────────────────────────────┐
     │                           BOOL QUERY                                    │
-    │  ┌───────────────────────────────────────────────────────────────────┐ │
-    │  │ MUST (bắt buộc ít nhất 1 trong các SHOULD match)                  │ │
-    │  │  ┌─────────────────────────────────────────────────────────────┐  │ │
-    │  │  │ SHOULD clauses (minimum_should_match = 1):                  │  │ │
-    │  │  │                                                             │  │ │
-    │  │  │ 1. Match có dấu chính xác (boost = 10)                     │  │ │
-    │  │  │    fields: title^5, body                                    │  │ │
-    │  │  │                                                             │  │ │
-    │  │  │ 2. Phrase match có dấu (boost = 15)                        │  │ │
-    │  │  │    fields: title^10, body^2, slop = 2                      │  │ │
-    │  │  │                                                             │  │ │
-    │  │  │ 3. Match không dấu (boost = 7.5)                            │  │ │
-    │  │  │    fields: title.no_accent^5, body.no_accent               │  │ │
-    │  │  │                                                             │  │ │
-    │  │  │ 4. Fuzzy match (boost = 2)                                 │  │ │
-    │  │  │    fields: title^5, body, fuzziness = AUTO                 │  │ │
-    │  │  └─────────────────────────────────────────────────────────────┘  │ │
-    │  └───────────────────────────────────────────────────────────────────┘ │
+    │  ┌───────────────────────────────────────────────────────────────────┐  │
+    │  │ MUST (bắt buộc ít nhất 1 trong các SHOULD match)                  │  │
+    │  │  ┌─────────────────────────────────────────────────────────────┐  │  │
+    │  │  │ SHOULD clauses (minimum_should_match = 1):                  │  │  │
+    │  │  │                                                             │  │  │
+    │  │  │ 1. Match có dấu chính xác (boost = 10)                      │  │  │
+    │  │  │    fields: title^5, body                                    │  │  │
+    │  │  │                                                             │  │  │
+    │  │  │ 2. Phrase match có dấu (boost = 15)                         │  │  │
+    │  │  │    fields: title^10, body^2, slop = 2                       │  │  │
+    │  │  │                                                             │  │  │
+    │  │  │ 3. Match không dấu (boost = 7.5)                            │  │  │
+    │  │  │    fields: title.no_accent^5, body.no_accent                │  │  │
+    │  │  │                                                             │  │  │
+    │  │  │ 4. Fuzzy match (boost = 2)                                  │  │  │
+    │  │  │    fields: title^5, body, fuzziness = AUTO                  │  │  │
+    │  │  └─────────────────────────────────────────────────────────────┘  │  │
+    │  └───────────────────────────────────────────────────────────────────┘  │
     └─────────────────────────────────────────────────────────────────────────┘
 
 Giải thích các mức độ ưu tiên:
@@ -627,9 +642,10 @@ Các thành tựu đạt được:
    - Tránh trùng lặp hiệu quả với MD5 hash
 
 2. Xử lý tiếng Việt:
-   - ICU tokenizer cho chuẩn Unicode
+   - Standard tokenizer của Elasticsearch
    - Stopwords tiếng Việt (80+ từ)
    - Hỗ trợ tìm kiếm có dấu và không dấu
+   - Encoding đồng nhất với response.content cho tất cả nguồn
 
 3. Tìm kiếm thông minh:
    - 4 mức độ ưu tiên: phrase > có dấu > không dấu > fuzzy
