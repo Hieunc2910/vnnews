@@ -146,29 +146,53 @@ class ElasticIndexer:
         return success
 
     def search(self, query, size=10, source=None, from_date=None, to_date=None):
-        """Tìm kiếm bài báo"""
+        """Tìm kiếm bài báo với xử lý sai chính tả nhưng ưu tiên từ đúng"""
         must = []
         should = []
 
         if query:
-            must.append({
+            # Ưu tiên cao nhất: Match chính xác (boost 5)
+            should.append({
+                "multi_match": {
+                    "query": query,
+                    "fields": ["title^5", "body"],
+                    "type": "best_fields",
+                    "operator": "or",
+                    "boost": 5
+                }
+            })
+
+            # Ưu tiên thấp hơn: Match với fuzziness (boost 1)
+            should.append({
                 "multi_match": {
                     "query": query,
                     "fields": ["title^5", "body"],
                     "type": "best_fields",
                     "fuzziness": "AUTO",
-                    "operator": "or"
+                    "operator": "or",
+                    "boost": 1
                 }
             })
 
+            # Phrase match (boost 10)
             should.append({
                 "multi_match": {
                     "query": query,
                     "fields": ["title^10", "body^2"],
                     "type": "phrase",
-                    "slop": 2
+                    "slop": 2,
+                    "boost": 10
                 }
             })
+
+            # Bắt buộc ít nhất 1 trong các điều kiện should phải match
+            must.append({
+                "bool": {
+                    "should": should,
+                    "minimum_should_match": 1
+                }
+            })
+            should = []  # Reset should cho bool ngoài
 
         if source:
             must.append({"term": {"source": source}})
@@ -184,9 +208,7 @@ class ElasticIndexer:
         search_body = {
             "query": {
                 "bool": {
-                    "must": must if must else [{"match_all": {}}],
-                    "should": should,
-                    "minimum_should_match": 0
+                    "must": must if must else [{"match_all": {}}]
                 }
             },
             "size": size,
@@ -222,4 +244,5 @@ class ElasticIndexer:
             }
             for hit in results["hits"]["hits"]
         ]
+
 
