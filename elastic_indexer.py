@@ -33,7 +33,7 @@ class ElasticIndexer:
         self._ensure_index()
 
     def _ensure_index(self):
-        """Tạo index đơn giản, Elasticsearch tự động xử lý mapping"""
+        """Tạo index với hỗ trợ tìm kiếm có dấu và không dấu"""
         if self.es.indices.exists(index=self.index_name):
             return
 
@@ -42,18 +42,52 @@ class ElasticIndexer:
                 "number_of_shards": 1,
                 "number_of_replicas": 0,
                 "analysis": {
+                    "filter": {
+                        "vietnamese_stop": {
+                            "type": "stop",
+                            "stopwords": "_none_"
+                        },
+                        "vietnamese_folding": {
+                            "type": "asciifolding",
+                            "preserve_original": False
+                        }
+                    },
                     "analyzer": {
                         "vietnamese_analyzer": {
-                            "type": "standard",
-                            "stopwords": "_none_"
+                            "type": "custom",
+                            "tokenizer": "standard",
+                            "filter": ["lowercase", "vietnamese_stop"]
+                        },
+                        "vietnamese_no_accent": {
+                            "type": "custom",
+                            "tokenizer": "standard",
+                            "filter": ["lowercase", "vietnamese_folding", "vietnamese_stop"]
                         }
                     }
                 }
             },
             "mappings": {
                 "properties": {
-                    "title": {"type": "text", "analyzer": "vietnamese_analyzer"},
-                    "body": {"type": "text", "analyzer": "vietnamese_analyzer"},
+                    "title": {
+                        "type": "text",
+                        "analyzer": "vietnamese_analyzer",
+                        "fields": {
+                            "no_accent": {
+                                "type": "text",
+                                "analyzer": "vietnamese_no_accent"
+                            }
+                        }
+                    },
+                    "body": {
+                        "type": "text",
+                        "analyzer": "vietnamese_analyzer",
+                        "fields": {
+                            "no_accent": {
+                                "type": "text",
+                                "analyzer": "vietnamese_no_accent"
+                            }
+                        }
+                    },
                     "publish_date": {"type": "date", "format": "yyyy-MM-dd", "ignore_malformed": True},
                     "publish_date_str": {"type": "text"},
                     "source": {"type": "keyword"},
@@ -146,23 +180,45 @@ class ElasticIndexer:
         return success
 
     def search(self, query, size=10, source=None, from_date=None, to_date=None):
-        """Tìm kiếm bài báo với xử lý sai chính tả nhưng ưu tiên từ đúng"""
+        """Tìm kiếm ưu tiên: có dấu chính xác > không dấu > sai chính tả"""
         must = []
         should = []
 
         if query:
-            # Ưu tiên cao nhất: Match chính xác (boost 5)
+            # 1. Ưu tiên CAO NHẤT: Match có dấu chính xác
             should.append({
                 "multi_match": {
                     "query": query,
                     "fields": ["title^5", "body"],
                     "type": "best_fields",
                     "operator": "or",
-                    "boost": 5
+                    "boost": 10
                 }
             })
 
-            # Ưu tiên thấp hơn: Match với fuzziness (boost 1)
+            # 2. Ưu tiên CAO: Phrase match có dấu
+            should.append({
+                "multi_match": {
+                    "query": query,
+                    "fields": ["title^10", "body^2"],
+                    "type": "phrase",
+                    "slop": 2,
+                    "boost": 15
+                }
+            })
+
+            # 3. Ưu tiên TRUNG BÌNH: Match không dấu
+            should.append({
+                "multi_match": {
+                    "query": query,
+                    "fields": ["title.no_accent^5", "body.no_accent"],
+                    "type": "best_fields",
+                    "operator": "or",
+                    "boost": 7.5
+                }
+            })
+
+            # 4. Ưu tiên THẤP: Match với fuzziness
             should.append({
                 "multi_match": {
                     "query": query,
@@ -170,20 +226,10 @@ class ElasticIndexer:
                     "type": "best_fields",
                     "fuzziness": "AUTO",
                     "operator": "or",
-                    "boost": 1
+                    "boost": 2
                 }
             })
 
-            # Phrase match (boost 10)
-            should.append({
-                "multi_match": {
-                    "query": query,
-                    "fields": ["title^10", "body^2"],
-                    "type": "phrase",
-                    "slop": 2,
-                    "boost": 10
-                }
-            })
 
             # Bắt buộc ít nhất 1 trong các điều kiện should phải match
             must.append({
