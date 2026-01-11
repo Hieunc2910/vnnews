@@ -37,25 +37,16 @@ class ElasticIndexer:
         if self.es.indices.exists(index=self.index_name):
             return
 
-        # Stopwords tiếng Việt phổ biến
+        # Vietnamese stopwords
         vietnamese_stopwords = [
-            # Đại từ
-            "tôi", "tao", "mình", "ta", "chúng tôi", "chúng ta", "họ", "nó", "ông", "bà",
-            # Liên từ, giới từ
-            "và", "hoặc", "hay", "nhưng", "mà", "nên", "vì", "do", "bởi", "để", "cho",
-            "với", "của", "từ", "đến", "trong", "ngoài", "trên", "dưới", "giữa",
-            # Trợ từ, phụ từ
-            "là", "thì", "mới", "đã", "đang", "sẽ", "vẫn", "còn", "cũng", "lại",
-            "rồi", "rất", "quá", "lắm", "hơn", "nhất", "được", "bị", "phải",
-            # Chỉ định
-            "này", "đó", "kia", "ấy", "đây", "nọ",
-            # Số lượng
-            "các", "những", "mọi", "mỗi", "một", "hai", "nhiều", "ít", "vài",
-            # Nghi vấn
-            "gì", "nào", "sao", "đâu", "bao", "mấy",
-            # Khác
-            "có", "không", "chưa", "đều", "cả", "theo", "về", "ra", "vào",
-            "lên", "xuống", "sang", "qua", "lại", "nữa", "thêm", "bớt"
+            "bị", "bởi", "cả", "các", "cái", "cần", "càng", "chỉ", "chiếc", "cho",
+            "chứ", "chưa", "chuyện", "có", "có thể", "cứ", "của", "cùng", "cũng",
+            "đã", "đang", "đây", "để", "đến nỗi", "đều", "điều", "do", "đó",
+            "được", "dưới", "gì", "khi", "không", "là", "lại", "lên", "lúc",
+            "mà", "mỗi", "một cách", "này", "nên", "nếu", "ngay", "nhiều", "như",
+            "nhưng", "những", "nơi", "nữa", "phải", "qua", "ra", "rằng", "rất",
+            "rồi", "sau", "sẽ", "so", "sự", "tại", "theo", "thì", "trên", "trước",
+            "từ", "từng", "và", "vẫn", "vào", "vậy", "vì", "việc", "với", "vừa"
         ]
 
         settings = {
